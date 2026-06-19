@@ -1,23 +1,30 @@
-import type { Metadata } from "next";
-import { Plus_Jakarta_Sans } from 'next/font/google';
-import "./globals.css";
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import ProgressBarProvider from '@/components/providers/ProgressBarProvider'
+import Footer from '@/components/layout/Footer'
 
-// Font modern favorit Gen Z untuk UI yang clean
-const jakarta = Plus_Jakarta_Sans({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "Aplikasi Voting Nominasi",
-  description: "Platform voting digital dengan Google OAuth",
-};
+  title: 'Brawijaya Appreciate',
+  description: 'Digital Voting System Brawijaya Appreciate 2025',
+}
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   return (
     <html lang="id">
-      <body className={jakarta.className}>{children}</body>
+      <body className={inter.className}>
+        <ProgressBarProvider>
+          {children}
+        </ProgressBarProvider>
+
+        <Footer/>
+      </body>
     </html>
-  );
+  )
 }

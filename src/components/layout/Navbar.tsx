@@ -2,33 +2,34 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Menu, X, Star } from 'lucide-react'
-import { useAuth } from '@/hooks/useAuth' // Hook sudah diaktifkan
-import { supabase } from '@/lib/supabase/client' // Import supabase untuk fungsi login
+import { usePathname, useRouter } from 'next/navigation'
+import { Menu, X, Star, UserCircle } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase/client'
 
 export default function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const pathname = usePathname()
+  const router = useRouter()
+  const { isLoggedIn, isAdmin, userName, logout } = useAuth()
 
-  // Mengambil state langsung dari custom hook yang kita buat
-  const { isLoggedIn, isAdmin, logout } = useAuth()
-
-  // Fungsi untuk login dengan Google dari Navbar
   const handleLogin = async () => {
-    // Mengarahkan ke dashboard setelah berhasil login
-    const redirectTo = 'https://voting-app-ten-gamma.vercel.app/ranking';
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const redirectBase = siteUrl.endsWith('/') ? siteUrl.slice(0, -1) : siteUrl;
+    const redirectTo = `${redirectBase}/ranking`;
+
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo }
     });
   }
 
-  // Fungsi khusus untuk logout sekalian menutup menu mobile
   const handleLogout = async () => {
     await logout()
     setIsMobileMenuOpen(false)
+    router.push('/')
   }
 
-  // Mencegah scroll saat mobile menu terbuka
   useEffect(() => {
     if (isMobileMenuOpen) {
       document.body.style.overflow = 'hidden'
@@ -66,36 +67,50 @@ export default function Navbar() {
           {/* Desktop Menu */}
           <div className="hidden md:flex md:items-center md:gap-8">
             <div className="flex items-baseline gap-6">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  className="text-white font-bold text-lg hover:text-[#F5CF52] hover:-translate-y-1 hover:rotate-2 transition-all duration-300 drop-shadow-sm"
-                >
-                  {link.name}
-                </Link>
-              ))}
+              {navLinks.map((link) => {
+                const isActive = pathname === link.href
+                return (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    className={`font-bold text-lg hover:-translate-y-1 hover:rotate-2 transition-all duration-300 drop-shadow-sm ${
+                      isActive ? 'text-[#C8E53A]' : 'text-white hover:text-[#F5CF52]'
+                    }`}
+                  >
+                    {link.name}
+                  </Link>
+                )
+              })}
               
-              {/* Conditional Dashboard Link */}
               {isLoggedIn && isAdmin && (
                 <Link
                   href="/dashboard"
-                  className="text-[#C8E53A] font-extrabold text-lg hover:text-white hover:-translate-y-1 hover:-rotate-2 transition-all duration-300 drop-shadow-md"
+                  className={`font-extrabold text-lg hover:-translate-y-1 hover:-rotate-2 transition-all duration-300 drop-shadow-md ${
+                    pathname === '/dashboard' ? 'text-[#C8E53A]' : 'text-white hover:text-[#F5CF52]'
+                  }`}
                 >
                   Dashboard
                 </Link>
               )}
             </div>
 
-            {/* Login / Logout Button */}
-            <div className="ml-4">
+            {/* Login / User Profile & Logout Button */}
+            <div className="ml-4 flex items-center gap-4">
               {isLoggedIn ? (
-                <button 
-                  onClick={logout}
-                  className="px-6 py-2.5 bg-white text-[#E7267B] font-bold rounded-full border-2 border-transparent hover:border-white hover:bg-transparent hover:text-white transition-all duration-300 shadow-[4px_4px_0px_rgba(35,69,230,0.5)] active:translate-y-1 active:shadow-none"
-                >
-                  Logout
-                </button>
+                <>
+                  <div className="flex items-center gap-2 px-4 py-2 bg-white/20 border-2 border-white/40 rounded-full backdrop-blur-md">
+                    <UserCircle className="h-5 w-5 text-white" />
+                    <span className="text-white font-bold text-sm max-w-[120px] truncate">
+                      Hi, {userName}
+                    </span>
+                  </div>
+                  <button 
+                    onClick={handleLogout}
+                    className="px-6 py-2 bg-white text-[#E7267B] font-bold rounded-full border-2 border-transparent hover:border-white hover:bg-transparent hover:text-white transition-all duration-300 shadow-[4px_4px_0px_rgba(35,69,230,0.5)] active:translate-y-1 active:shadow-none"
+                  >
+                    Logout
+                  </button>
+                </>
               ) : (
                 <button 
                   onClick={handleLogin}
@@ -107,7 +122,7 @@ export default function Navbar() {
             </div>
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* Mobile Menu Button (Sisanya tetap sama) */}
           <div className="flex md:hidden">
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
@@ -130,22 +145,36 @@ export default function Navbar() {
         }`}
       >
         <div className="px-4 pt-2 pb-6 space-y-2 flex flex-col items-center">
-          {navLinks.map((link) => (
-            <Link
-              key={link.name}
-              href={link.href}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="block w-full text-center px-3 py-4 text-white font-bold text-xl hover:bg-white/10 hover:text-[#F5CF52] rounded-2xl transition-colors"
-            >
-              {link.name}
-            </Link>
-          ))}
+          {isLoggedIn && (
+            <div className="flex items-center gap-2 mb-4 px-4 py-2 bg-white/20 rounded-full border border-white/40">
+              <UserCircle className="h-5 w-5 text-[#F5CF52]" />
+              <span className="text-white font-bold text-sm">Hi, {userName}</span>
+            </div>
+          )}
+
+          {navLinks.map((link) => {
+            const isActive = pathname === link.href
+            return (
+              <Link
+                key={link.name}
+                href={link.href}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`block w-full text-center px-3 py-4 font-bold text-xl rounded-2xl transition-colors ${
+                  isActive ? 'text-[#C8E53A] bg-white/10' : 'text-white hover:bg-white/10 hover:text-[#F5CF52]'
+                }`}
+              >
+                {link.name}
+              </Link>
+            )
+          })}
 
           {isLoggedIn && isAdmin && (
             <Link
               href="/dashboard"
               onClick={() => setIsMobileMenuOpen(false)}
-              className="block w-full text-center px-3 py-4 text-[#C8E53A] font-extrabold text-xl hover:bg-white/10 hover:text-white rounded-2xl transition-colors"
+              className={`block w-full text-center px-3 py-4 font-extrabold text-xl rounded-2xl transition-colors ${
+                pathname === '/dashboard' ? 'text-[#C8E53A] bg-white/10' : 'text-white hover:bg-white/10 hover:text-[#F5CF52]'
+              }`}
             >
               Dashboard
             </Link>
