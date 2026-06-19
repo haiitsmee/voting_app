@@ -143,13 +143,6 @@ export default function LandingPage() {
         )}
       </main>
 
-      {/* Footer tetap sama */}
-      <footer className="relative z-10 w-full bg-[#2345E6] text-white px-6 pt-16 pb-12 text-center flex flex-col items-center">
-        <h2 className="text-4xl md:text-5xl font-black mb-4 text-[#C8E53A]">ABOUT US</h2>
-        <p className="max-w-3xl leading-relaxed text-white/90">
-          Program kerja dari Kementerian Dalam Negeri Eksekutif Mahasiswa Universitas Brawijaya untuk <span className="font-black text-[#C8E53A]">BEM, DPM, HIMA, dan UKM</span>.
-        </p>
-      </footer>
     </div>
   )
 }
