@@ -90,14 +90,21 @@ export default function LandingPage() {
           <div className="absolute -top-6 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-4 py-1 bg-crown-bronze rounded-t-xl shadow-lg">
             <span className="text-crown-cream text-base font-bold tracking-widest">CROWN 2026</span>
           </div>
-          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight mb-2 flex flex-wrap items-center justify-center gap-2 text-crown-gold drop-shadow-[2px_2px_0px_rgba(188,67,13,0.4)]">
-            {'CELESTIAL GALA'.split('').map((char, index) => (
-              <span
-                key={index}
-                className="relative inline-block"
-                style={{ transform: `translateY(${Math.sin(index) * 3}px) rotate(${Math.cos(index) * 2}deg)` }}
-              >
-                {char}
+          <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight mb-2 flex flex-wrap items-center justify-center text-crown-gold drop-shadow-[2px_2px_0px_rgba(188,67,13,0.4)]">
+            {'CELESTIAL GALA'.split(' ').map((word, wordIndex) => (
+              <span key={wordIndex} className="inline-flex whitespace-nowrap mx-2">
+                {word.split('').map((char, charIndex) => {
+                  const index = wordIndex * 10 + charIndex
+                  return (
+                    <span
+                      key={charIndex}
+                      className="relative inline-block"
+                      style={{ transform: `translateY(${Math.sin(index) * 3}px) rotate(${Math.cos(index) * 2}deg)` }}
+                    >
+                      {char}
+                    </span>
+                  )
+                })}
               </span>
             ))}
           </h1>
