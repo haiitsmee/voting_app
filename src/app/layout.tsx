@@ -8,7 +8,10 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'CROWN FIA UB',
-  description: 'Digital Voting System CROWN 2026',
+  description: 'Digital Voting System Civitas Akademika FIA UB 2026',
+   icons: {
+    icon: '/crown-logo.png',
+  }
 }
 
 export default function RootLayout({
