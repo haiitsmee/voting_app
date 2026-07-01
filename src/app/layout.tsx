@@ -7,8 +7,8 @@ import Footer from '@/components/layout/Footer'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Brawijaya Appreciate',
-  description: 'Digital Voting System Brawijaya Appreciate 2025',
+  title: 'CROWN FIA UB',
+  description: 'Digital Voting System CROWN 2026',
 }
 
 export default function RootLayout({
