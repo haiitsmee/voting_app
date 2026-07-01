@@ -4,48 +4,41 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --crown-espresso: 35 76% 8%;      
+    --crown-gold: 35 88% 50%;      
+    --crown-bronze: 18 87% 39%;    
+    --crown-cream: 342 83% 95%;    
+    --crown-cream-dark: 13 62% 86%;
+
+    --background: var(--crown-espresso);
+    --foreground: var(--crown-cream);
+    
+    --card: var(--crown-espresso);
+    --card-foreground: var(--crown-cream);
+    
+    --popover: var(--crown-espresso);
+    --popover-foreground: var(--crown-cream);
+    
+    --primary: var(--crown-gold);
+    --primary-foreground: var(--crown-espresso);
+    
+    --secondary: var(--crown-bronze);
+    --secondary-foreground: var(--crown-cream);
+    
+    --muted: 35 40% 15%;
+    --muted-foreground: var(--crown-cream-dark);
+    
+    --accent: var(--crown-bronze);
+    --accent-foreground: var(--crown-cream);
+    
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    
+    --border: var(--crown-bronze);
+    --input: var(--crown-bronze);
+    --ring: var(--crown-gold);
+    
+    --radius: 0.75rem; 
   }
 }
 

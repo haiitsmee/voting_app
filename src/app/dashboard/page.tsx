@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Navbar from '@/components/layout/Navbar'
 import { supabase } from '@/lib/supabase/client'
+import { supabaseFetcher } from '@/lib/supabase/fetcher'
 import { 
   BarChart3, 
   FolderPlus, 
@@ -15,7 +16,10 @@ import {
   AlertTriangle,
   Pencil,
   Trash2,
-  X
+  X,
+  Users,
+  Search,
+  Download
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -32,6 +36,12 @@ import {
 type Category = { id: string; name: string }
 type Nominee = { id: string; name: string; description: string; category_id: string }
 type RankingItem = { name: string; count: number; category_id: string }
+type Voter = {
+  id: string
+  nim: string
+  email: string
+  created_at: string
+}
 
 export default function DashboardPage() {
   const [isMounted, setIsMounted] = useState(false)
@@ -58,16 +68,19 @@ export default function DashboardPage() {
   const [newNominee, setNewNominee] = useState({ name: '', description: '', category_id: '' })
   const [editingNomineeId, setEditingNomineeId] = useState<string | null>(null)
 
-  // Alert Dialog State (Informasi)
+  // Voters State
+  const [voters, setVoters] = useState<Voter[]>([])
+  const [votersLoading, setVotersLoading] = useState(false)
+  const [votersSearch, setVotersSearch] = useState('')
+  const [votersError, setVotersError] = useState<string | null>(null)
+
+  // Alert Dialog State
   const [alertConfig, setAlertConfig] = useState({ open: false, title: '', message: '', isError: false })
-  
-  // Alert Dialog State (Konfirmasi Hapus)
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, type: '', id: '', name: '' })
 
   const showAlert = (title: string, message: string, isError = false) => {
     setAlertConfig({ open: true, title, message, isError })
   }
-
   const closeAlert = () => setAlertConfig(prev => ({ ...prev, open: false }))
 
   useEffect(() => {
@@ -77,6 +90,7 @@ export default function DashboardPage() {
     fetchSettings()
   }, [])
 
+  // --- FETCH FUNCTIONS ---
   const fetchSettings = async () => {
     const { data } = await supabase.from('settings').select('*').limit(1).single()
     if (data) {
@@ -117,14 +131,47 @@ export default function DashboardPage() {
     setIsLoading(false)
   }
 
-  // --- CRUD KATEGORI ---
+  // --- FETCH VOTERS ---
+  const fetchVoters = async () => {
+    setVotersLoading(true)
+    setVotersError(null)
+    try {
+      const { data, error } = await supabaseFetcher<Voter[]>({
+        table: 'voters',
+        select: '*',
+        order: { column: 'created_at', ascending: false }
+      })
+      if (error) {
+        if (error.code === '42501') {
+          setVotersError('Akses ditolak. Anda tidak memiliki izin untuk melihat data voters.')
+        } else {
+          setVotersError(`Gagal mengambil data voters: ${error.message}`)
+        }
+        setVoters([])
+      } else {
+        setVoters(data || [])
+      }
+    } catch (err) {
+      console.error('Unexpected error fetchVoters:', err)
+      setVotersError('Terjadi kesalahan tak terduga saat memuat data voters.')
+      setVoters([])
+    } finally {
+      setVotersLoading(false)
+    }
+  }
 
+  useEffect(() => {
+    if (activeTab === 'voters') {
+      fetchVoters()
+    }
+  }, [activeTab])
+
+  // --- CRUD KATEGORI ---
   const handleSubmitCategory = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newCatName) return
 
     if (editingCatId) {
-      // Proses Update
       const { error } = await supabase.from('categories').update({ name: newCatName }).eq('id', editingCatId)
       if (!error) {
         showAlert('Berhasil!', 'Kategori berhasil diperbarui! ✨')
@@ -134,7 +181,6 @@ export default function DashboardPage() {
         showAlert('Gagal Update!', error.message, true)
       }
     } else {
-      // Proses Insert
       const { error } = await supabase.from('categories').insert({ name: newCatName })
       if (!error) {
         showAlert('Berhasil!', 'Kategori baru ditambahkan! ✨')
@@ -150,20 +196,17 @@ export default function DashboardPage() {
     setEditingCatId(c.id)
     setNewCatName(c.name)
   }
-
   const cancelEditCategory = () => {
     setEditingCatId(null)
     setNewCatName('')
   }
 
   // --- CRUD NOMINE ---
-
   const handleSubmitNominee = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newNominee.name || !newNominee.category_id) return
 
     if (editingNomineeId) {
-      // Proses Update
       const { error } = await supabase.from('nominees').update(newNominee).eq('id', editingNomineeId)
       if (!error) {
         showAlert('Berhasil!', 'Kandidat berhasil diperbarui! 🎉')
@@ -173,7 +216,6 @@ export default function DashboardPage() {
         showAlert('Gagal Update!', error.message, true)
       }
     } else {
-      // Proses Insert
       const { error } = await supabase.from('nominees').insert(newNominee)
       if (!error) {
         showAlert('Berhasil!', 'Kandidat baru ditambahkan! 🎉')
@@ -189,14 +231,12 @@ export default function DashboardPage() {
     setEditingNomineeId(n.id)
     setNewNominee({ name: n.name, description: n.description || '', category_id: n.category_id })
   }
-
   const cancelEditNominee = () => {
     setEditingNomineeId(null)
     setNewNominee({ name: '', description: '', category_id: '' })
   }
 
-  // --- FUNGSI HAPUS (DELETE) ---
-
+  // --- DELETE ---
   const confirmDelete = (type: 'category' | 'nominee', id: string, name: string) => {
     setDeleteConfirm({ open: true, type, id, name })
   }
@@ -212,7 +252,6 @@ export default function DashboardPage() {
     if (!error) {
       showAlert('Terhapus!', `${type === 'category' ? 'Kategori' : 'Nomine'} berhasil dihapus dari sistem.`)
       fetchData()
-      // Jika yang dihapus sedang di-edit, reset form-nya
       if (type === 'category' && editingCatId === id) cancelEditCategory()
       if (type === 'nominee' && editingNomineeId === id) cancelEditNominee()
     } else {
@@ -220,8 +259,7 @@ export default function DashboardPage() {
     }
   }
 
-  // --- FUNGSI LAINNYA ---
-
+  // --- ADMIN FUNCTIONS ---
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newAdminEmail) return
@@ -239,7 +277,7 @@ export default function DashboardPage() {
     const { error } = await supabase.from('settings').update({ voting_is_active: !isVotingActive }).eq('id', settingId)
     if (!error) {
       setIsVotingActive(!isVotingActive)
-      showAlert('Status Diperbarui', `Status voting sekarang: ${!isVotingActive ? 'Aktif' : 'Ditutup'} 🌸`)
+      showAlert('Status Diperbarui', `Status voting sekarang: ${!isVotingActive ? 'Aktif' : 'Ditutup'}`)
     }
   }
 
@@ -250,21 +288,139 @@ export default function DashboardPage() {
     if (!error) showAlert('Berhasil!', 'Pengumuman berhasil disimpan! 📢')
   }
 
+  const exportVotersCSV = () => {
+    const filtered = getFilteredVoters()
+    if (filtered.length === 0) {
+      showAlert('Tidak Ada Data', 'Tidak ada data voters untuk diekspor.', true)
+      return
+    }
+    const delimiter = ';'
+    const headers = ['Email', 'NIM', 'Tanggal Registrasi']
+    const rows = filtered.map(v => [
+      v.email,
+      `="${v.nim}"`, // NIM diformat sebagai teks agar tidak scientific notation
+      new Date(v.created_at).toLocaleString('id-ID', { 
+        day: '2-digit', 
+        month: 'long', 
+        year: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      })
+    ])
+    const csvContent = [
+      headers.join(delimiter),
+      ...rows.map(r => r.join(delimiter))
+    ].join('\n')
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `voters_${new Date().toISOString().slice(0,10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+  }
+
+  const getFilteredVoters = () => {
+    if (!votersSearch.trim()) return voters
+    const q = votersSearch.trim().toLowerCase()
+    return voters.filter(v => 
+      v.email.toLowerCase().includes(q) || 
+      v.nim.includes(q)
+    )
+  }
+
+  // TABS
   const tabs = [
     { id: 'monitor', label: 'Pemantauan', icon: BarChart3 },
     { id: 'category', label: 'Kategori', icon: FolderPlus },
     { id: 'nominee', label: 'Nomine', icon: UserPlus },
+    { id: 'voters', label: 'Data Voters', icon: Users },
     { id: 'settings', label: 'Pengaturan', icon: ShieldCheck },
   ]
 
   if (!isMounted) return null
 
+  // Komponen Tabel Voters
+  const renderVotersTable = () => {
+    const filtered = getFilteredVoters()
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-crown-gold/60" />
+            <input
+              type="text"
+              placeholder="Cari NIM atau Email..."
+              value={votersSearch}
+              onChange={(e) => setVotersSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-crown-espresso border border-crown-gold/30 rounded-xl text-crown-cream placeholder:text-crown-cream-dark/50 focus:outline-none focus:ring-2 focus:ring-crown-gold/60 transition-all"
+            />
+          </div>
+          <button
+            onClick={exportVotersCSV}
+            className="flex items-center gap-2 px-5 py-2 bg-crown-gold text-crown-espresso font-bold rounded-xl hover:bg-[#d8820e] transition-colors shadow-[0_4px_12px_rgba(240,148,16,0.3)]"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
+        </div>
+
+        {votersLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-8 w-8 text-crown-gold animate-spin" />
+          </div>
+        ) : votersError ? (
+          <div className="bg-red-500/20 border border-red-500/30 text-red-200 p-4 rounded-xl flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            <span>{votersError}</span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12 text-crown-cream-dark/60">
+            {votersSearch ? 'Tidak ada voter yang cocok dengan pencarian.' : 'Belum ada data voter.'}
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-crown-bronze/20 bg-crown-espresso/50">
+            <table className="w-full text-left">
+              <thead className="border-b border-crown-bronze/30 bg-crown-espresso">
+                <tr>
+                  <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-crown-gold">No</th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-crown-gold">Email Voter</th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-crown-gold">NIM Terverifikasi</th>
+                  <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-crown-gold">Waktu Registrasi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-crown-bronze/10">
+                {filtered.map((voter, idx) => (
+                  <tr key={voter.id} className="hover:bg-crown-cream/5 transition-colors">
+                    <td className="px-4 py-3 text-crown-cream-dark">{idx + 1}</td>
+                    <td className="px-4 py-3 font-medium text-crown-cream">{voter.email}</td>
+                    <td className="px-4 py-3 font-mono text-crown-cream-dark">{voter.nim}</td>
+                    <td className="px-4 py-3 text-sm text-crown-cream-dark">
+                      {new Date(voter.created_at).toLocaleString('id-ID', {
+                        day: '2-digit',
+                        month: 'long',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-[#F5CF52] font-sans flex flex-col">
+    <div className="min-h-screen bg-crown-espresso font-sans flex flex-col">
       <Navbar />
 
       <main className="flex-grow max-w-6xl mx-auto w-full px-4 py-8 relative z-10">
-        <h1 className="text-4xl font-black text-[#E7267B] mb-8 text-center uppercase drop-shadow-[2px_2px_0px_white]">
+        <h1 className="text-4xl font-black text-crown-gold mb-8 text-center uppercase drop-shadow-[2px_2px_0px_rgba(188,67,13,0.4)]">
           Control Panel
         </h1>
 
@@ -275,7 +431,9 @@ export default function DashboardPage() {
               <button
                 key={tab.id} onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-6 py-3 font-bold rounded-full border-2 transition-all ${
-                  isActive ? 'bg-[#2345E6] text-white border-[#2345E6] shadow-[4px_4px_0px_#E7267B] translate-y-[-2px]' : 'bg-white text-[#2345E6] border-[#2345E6] hover:bg-[#F5CF52]/20'
+                  isActive 
+                    ? 'bg-crown-gold text-crown-espresso border-crown-gold shadow-[0_4px_16px_rgba(240,148,16,0.4)] translate-y-[-2px]' 
+                    : 'bg-crown-cream/10 text-crown-cream border-crown-gold/30 hover:bg-crown-cream/20'
                 }`}
               >
                 <tab.icon className="w-5 h-5" /> {tab.label}
@@ -284,73 +442,91 @@ export default function DashboardPage() {
           })}
         </div>
 
-        <div className="bg-white p-8 rounded-[2rem] border-[3px] border-[#2345E6] shadow-[8px_8px_0px_#2345E6] min-h-[400px]">
+        <div className="bg-crown-cream/5 backdrop-blur-md p-8 rounded-[2rem] border border-crown-gold/20 shadow-[0_8px_32px_rgba(0,0,0,0.4)] min-h-[400px]">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-full py-20">
-              <Loader2 className="h-12 w-12 text-[#E7267B] animate-spin" />
-              <p className="mt-4 font-bold text-[#2345E6]">Memuat data sistem...</p>
+              <Loader2 className="h-12 w-12 text-crown-gold animate-spin" />
+              <p className="mt-4 font-bold text-crown-cream">Memuat data sistem...</p>
             </div>
           ) : (
             <>
-              {/* TAB 1: PEMANTAUAN (Tetap sama) */}
+              {/* TAB 1: PEMANTAUAN */}
               {activeTab === 'monitor' && (
                 <div className="animate-in fade-in duration-500 space-y-10">
-                  {/* ... Kode Statistik Global & Ranking per kategori tetap sama persis ... */}
                   <div>
-                    <h2 className="text-2xl font-black text-[#2345E6] mb-6">Statistik Global</h2>
+                    <h2 className="text-2xl font-black text-crown-gold mb-6">Statistik Global</h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div className="p-6 bg-[#C8E53A]/20 border-2 border-[#C8E53A] rounded-2xl text-center shadow-[4px_4px_0px_#C8E53A]"><p className="text-5xl font-black text-[#2345E6] mb-2">{stats.votes}</p><p className="font-bold text-zinc-700">Total Suara Masuk</p></div>
-                      <div className="p-6 bg-[#E7267B]/10 border-2 border-[#E7267B] rounded-2xl text-center shadow-[4px_4px_0px_#E7267B]"><p className="text-5xl font-black text-[#E7267B] mb-2">{stats.categories}</p><p className="font-bold text-zinc-700">Kategori Aktif</p></div>
-                      <div className="p-6 bg-[#2345E6]/10 border-2 border-[#2345E6] rounded-2xl text-center shadow-[4px_4px_0px_#2345E6]"><p className="text-5xl font-black text-[#2345E6] mb-2">{stats.nominees}</p><p className="font-bold text-zinc-700">Kandidat Terdaftar</p></div>
+                      <div className="p-6 bg-crown-cream/10 border border-crown-gold/30 rounded-2xl text-center shadow-[0_4px_12px_rgba(240,148,16,0.1)]">
+                        <p className="text-5xl font-black text-crown-gold mb-2">{stats.votes}</p>
+                        <p className="font-bold text-crown-cream-dark">Total Suara Masuk</p>
+                      </div>
+                      <div className="p-6 bg-crown-cream/10 border border-crown-gold/30 rounded-2xl text-center shadow-[0_4px_12px_rgba(240,148,16,0.1)]">
+                        <p className="text-5xl font-black text-crown-gold mb-2">{stats.categories}</p>
+                        <p className="font-bold text-crown-cream-dark">Kategori Aktif</p>
+                      </div>
+                      <div className="p-6 bg-crown-cream/10 border border-crown-gold/30 rounded-2xl text-center shadow-[0_4px_12px_rgba(240,148,16,0.1)]">
+                        <p className="text-5xl font-black text-crown-gold mb-2">{stats.nominees}</p>
+                        <p className="font-bold text-crown-cream-dark">Kandidat Terdaftar</p>
+                      </div>
                     </div>
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black text-[#2345E6] mb-6 uppercase">Posisi Kandidat per Kategori</h3>
+                    <h3 className="text-2xl font-black text-crown-gold mb-6 uppercase">Posisi Kandidat per Kategori</h3>
                     {categories.length > 0 ? (
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {categories.map((category) => {
                           const categoryRanking = ranking.filter(r => r.category_id === category.id)
                           return (
-                            <div key={category.id} className="bg-zinc-50 border-2 border-zinc-200 rounded-2xl p-6 shadow-sm">
-                              <h4 className="text-lg font-black text-[#E7267B] mb-4 border-b-2 border-zinc-200 pb-3">{category.name}</h4>
+                            <div key={category.id} className="bg-crown-cream/5 border border-crown-bronze/20 rounded-2xl p-6 shadow-sm">
+                              <h4 className="text-lg font-black text-crown-gold mb-4 border-b border-crown-bronze/30 pb-3">{category.name}</h4>
                               {categoryRanking.length > 0 ? (
                                 <div className="space-y-3">
                                   {categoryRanking.map((item, idx) => (
-                                    <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-xl border border-zinc-200 transition-transform hover:scale-[1.02]">
-                                      <div className="flex items-center gap-3"><span className={`w-8 h-8 flex items-center justify-center rounded-full font-black text-sm text-white ${idx === 0 ? 'bg-[#C8E53A] shadow-md' : idx === 1 ? 'bg-zinc-400' : idx === 2 ? 'bg-orange-400' : 'bg-zinc-200 text-zinc-600'}`}>{idx + 1}</span><span className="font-bold text-zinc-800">{item.name}</span></div>
-                                      <span className="font-black text-[#E7267B]">{item.count} Suara</span>
+                                    <div key={idx} className="flex items-center justify-between p-3 bg-crown-cream/5 rounded-xl border border-crown-bronze/10 transition-transform hover:scale-[1.02]">
+                                      <div className="flex items-center gap-3">
+                                        <span className={`w-8 h-8 flex items-center justify-center rounded-full font-black text-sm ${
+                                          idx === 0 ? 'bg-crown-gold text-crown-espresso shadow-md' : 
+                                          idx === 1 ? 'bg-crown-bronze/60 text-crown-cream' : 
+                                          idx === 2 ? 'bg-crown-bronze/30 text-crown-cream' : 
+                                          'bg-crown-cream/10 text-crown-cream-dark'
+                                        }`}>
+                                          {idx + 1}
+                                        </span>
+                                        <span className="font-bold text-crown-cream">{item.name}</span>
+                                      </div>
+                                      <span className="font-black text-crown-gold">{item.count} Suara</span>
                                     </div>
                                   ))}
                                 </div>
-                              ) : <p className="text-center font-medium text-zinc-400 py-4">Belum ada suara masuk.</p>}
+                              ) : <p className="text-center font-medium text-crown-cream-dark/60 py-4">Belum ada suara masuk.</p>}
                             </div>
                           )
                         })}
                       </div>
-                    ) : <p className="text-center font-bold text-zinc-400">Belum ada data kategori.</p>}
+                    ) : <p className="text-center font-bold text-crown-cream-dark/60">Belum ada data kategori.</p>}
                   </div>
                 </div>
               )}
 
-              {/* TAB 2: KATEGORI DENGAN CRUD */}
+              {/* TAB 2: KATEGORI */}
               {activeTab === 'category' && (
                 <div className="animate-in fade-in duration-500 grid md:grid-cols-2 gap-10">
-                  <div className="bg-zinc-50 p-6 rounded-3xl border-2 border-zinc-200 h-fit">
-                    <h2 className="text-2xl font-black text-[#2345E6] mb-4">
+                  <div className="bg-crown-cream/5 p-6 rounded-3xl border border-crown-gold/20 h-fit">
+                    <h2 className="text-2xl font-black text-crown-gold mb-4">
                       {editingCatId ? 'Ubah Kategori' : 'Tambah Kategori'}
                     </h2>
                     <form onSubmit={handleSubmitCategory} className="space-y-4">
                       <input 
                         type="text" required value={newCatName} onChange={(e) => setNewCatName(e.target.value)}
-                        className="w-full p-4 border-2 border-zinc-300 rounded-xl focus:border-[#E7267B] focus:outline-none focus:ring-4 focus:ring-[#E7267B]/20"
+                        className="w-full p-4 bg-crown-espresso border border-crown-gold/30 rounded-xl focus:border-crown-gold focus:outline-none focus:ring-2 focus:ring-crown-gold/30 text-crown-cream placeholder:text-crown-cream-dark/50"
                         placeholder="Contoh: BEM Fakultas Terbaik"
                       />
                       <div className="flex gap-2">
-                        <button type="submit" className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-white font-bold rounded-xl shadow-[4px_4px_0px_#2345E6] transition-transform active:translate-y-1 ${editingCatId ? 'bg-[#2345E6] hover:bg-[#1a35b8]' : 'bg-[#E7267B] hover:bg-[#c21f66]'}`}>
+                        <button type="submit" className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-crown-espresso font-bold rounded-xl shadow-[0_4px_12px_rgba(240,148,16,0.3)] transition-transform active:translate-y-1 ${editingCatId ? 'bg-crown-gold hover:bg-[#d8820e]' : 'bg-crown-gold hover:bg-[#d8820e]'}`}>
                           <Save className="w-5 h-5" /> {editingCatId ? 'Simpan Perubahan' : 'Simpan Kategori'}
                         </button>
                         {editingCatId && (
-                          <button type="button" onClick={cancelEditCategory} className="px-4 py-3 bg-zinc-200 text-zinc-700 font-bold rounded-xl hover:bg-zinc-300 transition-colors">
+                          <button type="button" onClick={cancelEditCategory} className="px-4 py-3 bg-crown-cream/10 text-crown-cream font-bold rounded-xl hover:bg-crown-cream/20 transition-colors">
                             <X className="w-5 h-5" />
                           </button>
                         )}
@@ -358,14 +534,16 @@ export default function DashboardPage() {
                     </form>
                   </div>
                   <div>
-                    <h2 className="text-2xl font-black text-[#2345E6] mb-4">Daftar Kategori ({categories.length})</h2>
+                    <h2 className="text-2xl font-black text-crown-gold mb-4">Daftar Kategori ({categories.length})</h2>
                     <div className="max-h-[400px] overflow-y-auto space-y-3 pr-2">
                       {categories.map(c => (
-                        <div key={c.id} className={`flex items-center justify-between p-4 border-2 rounded-xl font-bold transition-colors ${editingCatId === c.id ? 'border-[#E7267B] bg-[#E7267B]/10 text-[#E7267B]' : 'border-zinc-200 bg-zinc-50 text-[#2345E6]'}`}>
+                        <div key={c.id} className={`flex items-center justify-between p-4 border rounded-xl font-bold transition-colors ${
+                          editingCatId === c.id ? 'border-crown-gold bg-crown-gold/10 text-crown-gold' : 'border-crown-bronze/20 bg-crown-cream/5 text-crown-cream'
+                        }`}>
                           <span>{c.name}</span>
                           <div className="flex items-center gap-2">
-                            <button onClick={() => startEditCategory(c)} className="p-2 text-zinc-400 hover:text-[#2345E6] hover:bg-white rounded-lg transition-colors"><Pencil className="w-4 h-4" /></button>
-                            <button onClick={() => confirmDelete('category', c.id, c.name)} className="p-2 text-zinc-400 hover:text-[#E7267B] hover:bg-white rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => startEditCategory(c)} className="p-2 text-crown-cream-dark/50 hover:text-crown-gold hover:bg-crown-cream/10 rounded-lg transition-colors"><Pencil className="w-4 h-4" /></button>
+                            <button onClick={() => confirmDelete('category', c.id, c.name)} className="p-2 text-crown-cream-dark/50 hover:text-red-400 hover:bg-crown-cream/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         </div>
                       ))}
@@ -374,35 +552,35 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* TAB 3: NOMINE DENGAN CRUD */}
+              {/* TAB 3: NOMINE */}
               {activeTab === 'nominee' && (
                 <div className="animate-in fade-in duration-500 grid md:grid-cols-2 gap-10">
-                  <div className="bg-zinc-50 p-6 rounded-3xl border-2 border-zinc-200 h-fit">
-                    <h2 className="text-2xl font-black text-[#2345E6] mb-4">
+                  <div className="bg-crown-cream/5 p-6 rounded-3xl border border-crown-gold/20 h-fit">
+                    <h2 className="text-2xl font-black text-crown-gold mb-4">
                       {editingNomineeId ? 'Ubah Kandidat' : 'Tambah Kandidat'}
                     </h2>
                     <form onSubmit={handleSubmitNominee} className="space-y-4">
                       <select 
                         required value={newNominee.category_id} onChange={(e) => setNewNominee({ ...newNominee, category_id: e.target.value })}
-                        className="w-full p-4 border-2 border-zinc-300 rounded-xl focus:border-[#E7267B] focus:outline-none"
+                        className="w-full p-4 bg-crown-espresso border border-crown-gold/30 rounded-xl focus:border-crown-gold focus:outline-none focus:ring-2 focus:ring-crown-gold/30 text-crown-cream"
                       >
                         <option value="">-- Pilih Kategori --</option>
                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                       <input 
                         type="text" required value={newNominee.name} onChange={(e) => setNewNominee({ ...newNominee, name: e.target.value })}
-                        className="w-full p-4 border-2 border-zinc-300 rounded-xl focus:border-[#E7267B] focus:outline-none" placeholder="Nama Nomine"
+                        className="w-full p-4 bg-crown-espresso border border-crown-gold/30 rounded-xl focus:border-crown-gold focus:outline-none focus:ring-2 focus:ring-crown-gold/30 text-crown-cream placeholder:text-crown-cream-dark/50" placeholder="Nama Nomine"
                       />
                       <textarea 
                         value={newNominee.description} onChange={(e) => setNewNominee({ ...newNominee, description: e.target.value })}
-                        className="w-full p-4 border-2 border-zinc-300 rounded-xl focus:border-[#E7267B] focus:outline-none" rows={3} placeholder="Deskripsi Singkat"
+                        className="w-full p-4 bg-crown-espresso border border-crown-gold/30 rounded-xl focus:border-crown-gold focus:outline-none focus:ring-2 focus:ring-crown-gold/30 text-crown-cream placeholder:text-crown-cream-dark/50" rows={3} placeholder="Deskripsi Singkat"
                       />
                       <div className="flex gap-2">
-                        <button type="submit" className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-white font-bold rounded-xl shadow-[4px_4px_0px_#2345E6] transition-transform active:translate-y-1 ${editingNomineeId ? 'bg-[#2345E6] hover:bg-[#1a35b8]' : 'bg-[#E7267B] hover:bg-[#c21f66]'}`}>
+                        <button type="submit" className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 text-crown-espresso font-bold rounded-xl shadow-[0_4px_12px_rgba(240,148,16,0.3)] transition-transform active:translate-y-1 ${editingNomineeId ? 'bg-crown-gold hover:bg-[#d8820e]' : 'bg-crown-gold hover:bg-[#d8820e]'}`}>
                           <Save className="w-5 h-5" /> {editingNomineeId ? 'Simpan Perubahan' : 'Simpan Kandidat'}
                         </button>
                         {editingNomineeId && (
-                          <button type="button" onClick={cancelEditNominee} className="px-4 py-3 bg-zinc-200 text-zinc-700 font-bold rounded-xl hover:bg-zinc-300 transition-colors">
+                          <button type="button" onClick={cancelEditNominee} className="px-4 py-3 bg-crown-cream/10 text-crown-cream font-bold rounded-xl hover:bg-crown-cream/20 transition-colors">
                             <X className="w-5 h-5" />
                           </button>
                         )}
@@ -410,17 +588,19 @@ export default function DashboardPage() {
                     </form>
                   </div>
                   <div>
-                    <h2 className="text-2xl font-black text-[#2345E6] mb-4">Daftar Nomine ({nominees.length})</h2>
+                    <h2 className="text-2xl font-black text-crown-gold mb-4">Daftar Nomine ({nominees.length})</h2>
                     <div className="max-h-[500px] overflow-y-auto space-y-3 pr-2">
                       {nominees.map(n => (
-                        <div key={n.id} className={`flex items-start justify-between p-4 border-2 rounded-xl transition-colors ${editingNomineeId === n.id ? 'border-[#E7267B] bg-[#E7267B]/10' : 'border-zinc-200 bg-zinc-50'}`}>
+                        <div key={n.id} className={`flex items-start justify-between p-4 border rounded-xl transition-colors ${
+                          editingNomineeId === n.id ? 'border-crown-gold bg-crown-gold/10' : 'border-crown-bronze/20 bg-crown-cream/5'
+                        }`}>
                           <div>
-                            <p className={`font-black ${editingNomineeId === n.id ? 'text-[#E7267B]' : 'text-[#2345E6]'}`}>{n.name}</p>
-                            <p className="text-xs font-bold text-zinc-500 mt-1">Kat: {categories.find(c => c.id === n.category_id)?.name || 'Unknown'}</p>
+                            <p className={`font-black ${editingNomineeId === n.id ? 'text-crown-gold' : 'text-crown-cream'}`}>{n.name}</p>
+                            <p className="text-xs font-bold text-crown-cream-dark/60 mt-1">Kat: {categories.find(c => c.id === n.category_id)?.name || 'Unknown'}</p>
                           </div>
                           <div className="flex items-center gap-1 ml-2">
-                            <button onClick={() => startEditNominee(n)} className="p-2 text-zinc-400 hover:text-[#2345E6] hover:bg-white rounded-lg transition-colors"><Pencil className="w-4 h-4" /></button>
-                            <button onClick={() => confirmDelete('nominee', n.id, n.name)} className="p-2 text-zinc-400 hover:text-[#E7267B] hover:bg-white rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                            <button onClick={() => startEditNominee(n)} className="p-2 text-crown-cream-dark/50 hover:text-crown-gold hover:bg-crown-cream/10 rounded-lg transition-colors"><Pencil className="w-4 h-4" /></button>
+                            <button onClick={() => confirmDelete('nominee', n.id, n.name)} className="p-2 text-crown-cream-dark/50 hover:text-red-400 hover:bg-crown-cream/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         </div>
                       ))}
@@ -429,33 +609,54 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* TAB 4: PENGATURAN (Tetap sama persis) */}
+              {/* TAB 4: DATA VOTERS */}
+              {activeTab === 'voters' && (
+                <div className="animate-in fade-in duration-500">
+                  <h2 className="text-2xl font-black text-crown-gold mb-4 flex items-center gap-2">
+                    <Users className="w-6 h-6 text-crown-gold" />
+                    Data Voter Terdaftar
+                  </h2>
+                  {renderVotersTable()}
+                </div>
+              )}
+
+              {/* TAB 5: PENGATURAN */}
               {activeTab === 'settings' && (
                 <div className="animate-in fade-in duration-500 space-y-12">
-                   {/* ... Kode pengaturan status, pengumuman, dan admin ... */}
-                   <div className="grid md:grid-cols-2 gap-8">
-                    <div className="bg-zinc-50 p-6 rounded-3xl border-2 border-zinc-200 text-center flex flex-col justify-center">
-                      <h3 className="text-xl font-black text-[#2345E6] mb-4">Sesi Voting</h3>
-                      <div className={`p-6 rounded-2xl border-[3px] mb-4 transition-colors ${isVotingActive ? 'border-[#C8E53A] bg-[#C8E53A]/10' : 'border-[#E7267B] bg-[#E7267B]/10'}`}><p className="font-bold text-lg text-zinc-700">Status saat ini:</p><p className={`text-3xl font-black ${isVotingActive ? 'text-[#C8E53A]' : 'text-[#E7267B]'}`}>{isVotingActive ? 'AKTIF' : 'DITUTUP'}</p></div>
-                      <button onClick={toggleVotingStatus} className={`w-full py-4 font-black rounded-xl text-white shadow-[4px_4px_0px_rgba(0,0,0,0.1)] transition-transform active:translate-y-1 ${isVotingActive ? 'bg-[#E7267B] hover:bg-[#c21f66]' : 'bg-[#C8E53A] text-[#2345E6] hover:bg-[#b0cc2f]'}`}>{isVotingActive ? 'Tutup Voting Sekarang' : 'Buka Voting Kembali'}</button>
+                  <div className="grid md:grid-cols-2 gap-8">
+                    <div className="bg-crown-cream/5 p-6 rounded-3xl border border-crown-gold/20 text-center flex flex-col justify-center">
+                      <h3 className="text-xl font-black text-crown-gold mb-4">Sesi Voting</h3>
+                      <div className={`p-6 rounded-2xl border mb-4 transition-colors ${
+                        isVotingActive ? 'border-crown-gold/60 bg-crown-gold/10' : 'border-red-500/40 bg-red-500/10'
+                      }`}>
+                        <p className="font-bold text-lg text-crown-cream-dark">Status saat ini:</p>
+                        <p className={`text-3xl font-black ${isVotingActive ? 'text-crown-gold' : 'text-red-400'}`}>
+                          {isVotingActive ? 'AKTIF' : 'DITUTUP'}
+                        </p>
+                      </div>
+                      <button onClick={toggleVotingStatus} className={`w-full py-4 font-black rounded-xl text-crown-espresso shadow-[0_4px_12px_rgba(240,148,16,0.3)] transition-transform active:translate-y-1 ${
+                        isVotingActive ? 'bg-red-500 hover:bg-red-600' : 'bg-crown-gold hover:bg-[#d8820e]'
+                      }`}>
+                        {isVotingActive ? 'Tutup Voting Sekarang' : 'Buka Voting Kembali'}
+                      </button>
                     </div>
-                    <div className="bg-zinc-50 p-6 rounded-3xl border-2 border-zinc-200">
-                      <h3 className="text-xl font-black text-[#2345E6] mb-4 flex items-center gap-2"><Megaphone className="w-5 h-5 text-[#E7267B]" /> Teks Pengumuman</h3>
-                      <p className="text-sm font-medium text-zinc-500 mb-4">Teks ini bisa kamu tampilkan di halaman depan atau halaman ranking.</p>
+                    <div className="bg-crown-cream/5 p-6 rounded-3xl border border-crown-gold/20">
+                      <h3 className="text-xl font-black text-crown-gold mb-4 flex items-center gap-2"><Megaphone className="w-5 h-5 text-crown-gold" /> Teks Pengumuman</h3>
+                      <p className="text-sm font-medium text-crown-cream-dark/70 mb-4">Teks ini bisa kamu tampilkan di halaman depan atau halaman ranking.</p>
                       <form onSubmit={handleSaveAnnouncement} className="space-y-4 flex flex-col h-[calc(100%-80px)]">
-                        <textarea value={announcement} onChange={(e) => setAnnouncement(e.target.value)} className="w-full p-4 border-2 border-zinc-300 rounded-xl focus:border-[#E7267B] focus:outline-none flex-grow" placeholder="Contoh: Malam Puncak akan diadakan pada 25 Des 2025!" />
-                        <button type="submit" className="w-full py-4 bg-[#2345E6] text-white font-bold rounded-xl hover:bg-[#1a35b8] shadow-[4px_4px_0px_#E7267B]">Simpan Pengumuman</button>
+                        <textarea value={announcement} onChange={(e) => setAnnouncement(e.target.value)} className="w-full p-4 bg-crown-espresso border border-crown-gold/30 rounded-xl focus:border-crown-gold focus:outline-none focus:ring-2 focus:ring-crown-gold/30 text-crown-cream placeholder:text-crown-cream-dark/50 flex-grow" placeholder="Contoh: Malam Puncak akan diadakan pada 25 Des 2025!" />
+                        <button type="submit" className="w-full py-4 bg-crown-gold text-crown-espresso font-bold rounded-xl hover:bg-[#d8820e] shadow-[0_4px_12px_rgba(240,148,16,0.3)]">Simpan Pengumuman</button>
                       </form>
                     </div>
                   </div>
-                  <hr className="border-2 border-dashed border-zinc-200" />
+                  <hr className="border-crown-bronze/30" />
                   <div className="max-w-xl mx-auto text-center">
-                    <div className="mb-6 flex justify-center"><ShieldCheck className="w-16 h-16 text-[#C8E53A] drop-shadow-[2px_2px_0px_#2345E6]" /></div>
-                    <h2 className="text-2xl font-black text-[#2345E6] mb-2">Kelola Akses Administrator</h2>
-                    <p className="text-zinc-600 font-medium mb-6">Masukkan alamat email untuk memberikan akses penuh pada dasbor ini.</p>
+                    <div className="mb-6 flex justify-center"><ShieldCheck className="w-16 h-16 text-crown-gold drop-shadow-[0_4px_12px_rgba(240,148,16,0.3)]" /></div>
+                    <h2 className="text-2xl font-black text-crown-gold mb-2">Kelola Akses Administrator</h2>
+                    <p className="text-crown-cream-dark/70 font-medium mb-6">Masukkan alamat email untuk memberikan akses penuh pada dasbor ini.</p>
                     <form onSubmit={handleAddAdmin} className="space-y-4">
-                      <input type="email" required value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="w-full p-4 border-2 border-zinc-300 rounded-xl text-center focus:border-[#2345E6] focus:outline-none" placeholder="Contoh: temanmu@gmail.com" />
-                      <button type="submit" className="w-full py-4 bg-[#2345E6] text-[#C8E53A] font-black text-lg rounded-xl hover:bg-[#1a35b8] shadow-[4px_4px_0px_#E7267B] transition-transform active:translate-y-1">Jadikan Admin</button>
+                      <input type="email" required value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="w-full p-4 bg-crown-espresso border border-crown-gold/30 rounded-xl text-center focus:border-crown-gold focus:outline-none focus:ring-2 focus:ring-crown-gold/30 text-crown-cream placeholder:text-crown-cream-dark/50" placeholder="Contoh: temanmu@gmail.com" />
+                      <button type="submit" className="w-full py-4 bg-crown-gold text-crown-espresso font-black text-lg rounded-xl hover:bg-[#d8820e] shadow-[0_4px_12px_rgba(240,148,16,0.3)] transition-transform active:translate-y-1">Jadikan Admin</button>
                     </form>
                   </div>
                 </div>
@@ -465,42 +666,41 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      {/* 1. Global Alert Dialog (Untuk Info & Error) */}
+      {/* Alert Dialogs */}
       <AlertDialog open={alertConfig.open} onOpenChange={(open) => !open && closeAlert()}>
-        <AlertDialogContent className={`bg-white border-[3px] rounded-3xl ${alertConfig.isError ? 'border-[#E7267B]' : 'border-[#2345E6]'}`}>
+        <AlertDialogContent className="bg-crown-espresso border border-crown-gold/30 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.6)]">
           <AlertDialogHeader>
-            <AlertDialogTitle className={`flex items-center gap-2 text-2xl font-black ${alertConfig.isError ? 'text-[#E7267B]' : 'text-[#2345E6]'}`}>
+            <AlertDialogTitle className={`flex items-center gap-2 text-2xl font-black ${alertConfig.isError ? 'text-red-400' : 'text-crown-gold'}`}>
               {alertConfig.isError ? <AlertTriangle className="h-6 w-6" /> : <CheckCircle2 className="h-6 w-6" />}
               {alertConfig.title}
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-zinc-700 font-medium text-base mt-2">
+            <AlertDialogDescription className="text-crown-cream-dark font-medium text-base mt-2">
               {alertConfig.message}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-6">
-            <AlertDialogAction onClick={closeAlert} className={`rounded-full font-bold px-8 py-6 text-white ${alertConfig.isError ? 'bg-[#E7267B] hover:bg-[#c21f66]' : 'bg-[#2345E6] hover:bg-[#1a35b8]'}`}>
+            <AlertDialogAction onClick={closeAlert} className={`rounded-full font-bold px-8 py-6 text-crown-espresso ${alertConfig.isError ? 'bg-red-500 hover:bg-red-600' : 'bg-crown-gold hover:bg-[#d8820e]'}`}>
               OK, Mengerti!
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 2. Alert Dialog Konfirmasi Hapus */}
       <AlertDialog open={deleteConfirm.open} onOpenChange={(open) => !open && setDeleteConfirm({ open: false, type: '', id: '', name: '' })}>
-        <AlertDialogContent className="bg-white border-[3px] border-[#E7267B] rounded-3xl">
+        <AlertDialogContent className="bg-crown-espresso border border-red-500/40 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.6)]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-2xl font-black text-[#E7267B]">
+            <AlertDialogTitle className="flex items-center gap-2 text-2xl font-black text-red-400">
               <AlertTriangle className="h-6 w-6" /> Konfirmasi Hapus
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-zinc-700 font-medium text-base mt-2">
-              Apakah kamu yakin ingin menghapus <strong>{deleteConfirm.name}</strong>? Tindakan ini tidak dapat dibatalkan.
+            <AlertDialogDescription className="text-crown-cream-dark font-medium text-base mt-2">
+              Apakah kamu yakin ingin menghapus <strong className="text-crown-cream">{deleteConfirm.name}</strong>? Tindakan ini tidak dapat dibatalkan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-6 flex gap-2">
-            <AlertDialogCancel className="rounded-full font-bold px-8 py-6 border-2 border-zinc-200 text-zinc-600 hover:bg-zinc-100">
+            <AlertDialogCancel className="rounded-full font-bold px-8 py-6 border border-crown-bronze/30 text-crown-cream-dark hover:bg-crown-cream/10">
               Batal
             </AlertDialogCancel>
-            <AlertDialogAction onClick={executeDelete} className="rounded-full font-bold px-8 py-6 text-white bg-[#E7267B] hover:bg-[#c21f66] shadow-[4px_4px_0px_#2345E6]">
+            <AlertDialogAction onClick={executeDelete} className="rounded-full font-bold px-8 py-6 text-crown-espresso bg-red-500 hover:bg-red-600 shadow-[0_4px_12px_rgba(239,68,68,0.3)]">
               Ya, Hapus Sekarang
             </AlertDialogAction>
           </AlertDialogFooter>

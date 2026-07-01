@@ -1,33 +1,46 @@
-import { Star, Sparkles } from 'lucide-react'
+// src/app/loading.tsx
+import { Crown } from 'lucide-react'
 
 export default function Loading() {
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#F5CF52] overflow-hidden">
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-crown-espresso overflow-hidden">
       
-      {/* Background Ornamen Berputar */}
-      <div className="absolute top-20 left-20 w-32 h-32 opacity-20 animate-[spin_10s_linear_infinite]">
-        <Star className="w-full h-full text-[#E7267B] fill-[#E7267B]" />
+      {/* Background Ornamen – Bintang Berputar (emas dan perunggu) */}
+      <div className="absolute top-20 left-20 w-32 h-32 opacity-20 animate-[spin_30s_linear_infinite] pointer-events-none">
+        <svg viewBox="0 0 100 100" className="fill-crown-gold">
+          <path d="M50 0 L55.8 44.2 L100 50 L55.8 55.8 L50 100 L44.2 55.8 L0 50 L44.2 44.2 Z" />
+        </svg>
       </div>
-      <div className="absolute bottom-20 right-20 w-40 h-40 opacity-20 animate-[spin_15s_linear_infinite]">
-        <Sparkles className="w-full h-full text-[#2345E6] fill-[#2345E6]" />
+      <div className="absolute bottom-20 right-20 w-40 h-40 opacity-20 animate-[spin_25s_linear_infinite] pointer-events-none">
+        <svg viewBox="0 0 100 100" className="fill-crown-bronze">
+          <path d="M50 0 L55.8 44.2 L100 50 L55.8 55.8 L50 100 L44.2 55.8 L0 50 L44.2 44.2 Z" />
+        </svg>
+      </div>
+      <div className="absolute top-1/2 left-10 w-20 h-20 opacity-10 animate-[spin_40s_linear_infinite] pointer-events-none">
+        <svg viewBox="0 0 100 100" className="fill-crown-gold">
+          <path d="M50 0 L55.8 44.2 L100 50 L55.8 55.8 L50 100 L44.2 55.8 L0 50 L44.2 44.2 Z" />
+        </svg>
       </div>
 
-      {/* Main Loader */}
-      <div className="relative z-10 flex flex-col items-center">
-        <div className="relative w-24 h-24 mb-8">
-          <Star className="absolute inset-0 w-full h-full text-[#C8E53A] fill-[#C8E53A] animate-[ping_2s_infinite] opacity-50" />
-          <Star className="absolute inset-0 w-full h-full text-[#E7267B] fill-[#E7267B] animate-[bounce_1.5s_infinite] drop-shadow-[4px_4px_0px_#2345E6]" />
+      {/* Main Loader – Elegant Crown dengan efek glassmorphism */}
+      <div className="relative z-10 flex flex-col items-center bg-crown-cream/5 backdrop-blur-md border border-crown-gold/20 rounded-3xl px-12 py-10 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+        <div className="relative w-24 h-24 mb-6">
+          {/* Crown berdenyut dengan efek glow */}
+          <div className="absolute inset-0 rounded-full bg-crown-gold/20 animate-ping opacity-50" />
+          <Crown className="relative w-24 h-24 text-crown-gold drop-shadow-[0_0_20px_rgba(240,148,16,0.4)] animate-[bounce_1.5s_infinite]" />
         </div>
 
-        {/* Teks Loading */}
-        <h2 className="text-3xl md:text-4xl font-black text-[#2345E6] uppercase tracking-widest drop-shadow-[2px_2px_0px_white] animate-pulse">
-          Tunggu Sebentar...
+        <h2 className="text-2xl md:text-3xl font-black text-crown-gold tracking-widest uppercase drop-shadow-[0_2px_8px_rgba(240,148,16,0.3)] animate-pulse">
+          Memuat...
         </h2>
-        <div className="mt-4 flex gap-2">
-          <span className="w-3 h-3 rounded-full bg-[#E7267B] animate-[bounce_1s_infinite_100ms]"></span>
-          <span className="w-3 h-3 rounded-full bg-[#C8E53A] animate-[bounce_1s_infinite_200ms]"></span>
-          <span className="w-3 h-3 rounded-full bg-[#2345E6] animate-[bounce_1s_infinite_300ms]"></span>
+        <div className="mt-4 flex gap-3">
+          <span className="w-3 h-3 rounded-full bg-crown-gold animate-[bounce_1s_infinite_100ms]"></span>
+          <span className="w-3 h-3 rounded-full bg-crown-bronze animate-[bounce_1s_infinite_200ms]"></span>
+          <span className="w-3 h-3 rounded-full bg-crown-cream animate-[bounce_1s_infinite_300ms]"></span>
         </div>
+        <p className="mt-4 text-crown-cream-dark text-sm font-medium tracking-wide">
+          Menyiapkan semuanya untukmu...
+        </p>
       </div>
     </div>
   )
