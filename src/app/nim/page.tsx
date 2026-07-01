@@ -46,8 +46,9 @@ export default function NIMPage() {
     e.preventDefault()
     setError(null)
 
-    if (nim.length < 15) {
-      setError('NIM harus minimal 15 karakter.')
+    // Hanya validasi bahwa NIM tidak kosong
+    if (!nim.trim()) {
+      setError('NIM tidak boleh kosong.')
       return
     }
     if (!agree) {
@@ -68,7 +69,7 @@ export default function NIMPage() {
 
     // 2. Insert data menggunakan fetcher
     const { data, error: insertError } = await supabaseInsert<Voter>('voters', {
-      nim,
+      nim: nim.trim(),
       email,
     })
 
@@ -158,7 +159,6 @@ export default function NIMPage() {
                   disabled={loading || success}
                   required
                 />
-                <p className="text-xs text-crown-cream-dark/60 mt-1">Minimal 15 karakter</p>
               </div>
 
               <div className="flex items-start gap-3">
