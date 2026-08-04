@@ -15,6 +15,7 @@ import {
   Medal,
   AlertCircle,
 } from 'lucide-react'
+import StarBackground from '@/components/layout/StarBackground'
 
 // Tipe data
 type Category = {
@@ -221,31 +222,7 @@ export default function RankingPage() {
   return (
     <div className="min-h-screen bg-crown-espresso font-sans flex flex-col relative overflow-hidden">
       <Navbar />
-
-      {/* ===== ORNAMEN BINTANG BERPUSAT (3 buah) ===== */}
-      {/* 1. Bintang besar – kiri atas (sudah ada, kita pertahankan) */}
-      <div className="absolute top-40 -left-10 w-32 h-32 opacity-20 animate-[spin_20s_linear_infinite] pointer-events-none">
-        <Star className="w-full h-full text-crown-gold fill-crown-gold" />
-      </div>
-
-      {/* 2. Bintang sedang – kanan bawah (sudah ada, kita pertahankan) */}
-      <div className="absolute bottom-20 -right-10 w-40 h-40 opacity-20 animate-[spin_25s_linear_infinite] pointer-events-none">
-        <Sparkles className="w-full h-full text-crown-bronze fill-crown-bronze" />
-      </div>
-
-      {/* 3. Bintang tambahan – kanan atas (baru) */}
-      <div className="absolute top-32 right-16 w-20 h-20 opacity-15 animate-[spin_30s_linear_infinite] pointer-events-none">
-        <svg viewBox="0 0 100 100" className="fill-crown-gold">
-          <path d="M50 0 L55.8 44.2 L100 50 L55.8 55.8 L50 100 L44.2 55.8 L0 50 L44.2 44.2 Z" />
-        </svg>
-      </div>
-
-      {/* 4. Bintang tambahan – kiri bawah (baru) */}
-      <div className="absolute bottom-40 left-8 w-28 h-28 opacity-15 animate-[spin_35s_linear_infinite] pointer-events-none">
-        <svg viewBox="0 0 100 100" className="fill-crown-bronze">
-          <path d="M50 0 L55.8 44.2 L100 50 L55.8 55.8 L50 100 L44.2 55.8 L0 50 L44.2 44.2 Z" />
-        </svg>
-      </div>
+      <StarBackground/>
 
       <main className="flex-grow relative z-10 max-w-6xl mx-auto w-full px-6 py-12">
         <div className="text-center mb-16 animate-in fade-in slide-in-from-bottom-4 duration-700">

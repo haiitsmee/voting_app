@@ -18,6 +18,7 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import Navbar from '@/components/layout/Navbar'
+import StarBackground from '@/components/layout/StarBackground'
 
 // Tipe untuk data voter yang dikembalikan
 type Voter = {
@@ -109,8 +110,9 @@ export default function NIMPage() {
   return (
     <div className="relative min-h-screen flex flex-col bg-crown-espresso text-crown-cream overflow-hidden font-sans">
       <Navbar />
+      <StarBackground/>
 
-      <main className="flex-grow flex items-center justify-center px-6 py-12">
+      <main className="flex-grow flex z-10 items-center justify-center px-6 py-12">
         <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
           {/* Kolom Kiri: SOP */}
           <div className="space-y-6">

@@ -24,6 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import StarBackground from '@/components/layout/StarBackground'
 
 // Tipe data
 type Nominee = {
@@ -190,9 +191,10 @@ export default function NominationDetailPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-crown-espresso font-sans">
-      <Navbar />
+      <Navbar />  
+      <StarBackground/>      
 
-      <main className="flex-grow w-full max-w-4xl mx-auto px-6 py-20 md:py-28">
+      <main className="flex-grow w-full z-10 max-w-4xl mx-auto px-6 py-20 md:py-28">
         <div className="text-center mb-14">
           <p className="text-crown-gold/60 text-xs font-semibold uppercase tracking-[0.4em] mb-4">
             Crown 2026 &mdash; Official Ballot
