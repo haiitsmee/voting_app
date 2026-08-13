@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import Navbar from "@/components/layout/Navbar"
 import { useAuth } from "@/hooks/useAuth"
+import StarBackground from '@/components/layout/StarBackground'
 
 export default function LandingPage() {
   const { isLoggedIn, loading: authLoading } = useAuth()
@@ -68,20 +69,11 @@ export default function LandingPage() {
   const isLoading = authLoading || isDataLoading
 
   return (
+    
     <div className="relative min-h-screen flex flex-col items-center justify-start bg-crown-espresso text-crown-cream overflow-hidden font-sans">
+      
       <Navbar />
-
-      {/* Ornamen Bunga – menggunakan fill-crown-gold dengan opacity */}
-      <div className="absolute top-24 -left-12 z-0 w-32 h-32 md:w-48 md:h-48 animate-[spin_30s_linear_infinite]">
-        <svg viewBox="0 0 100 100" className="fill-crown-gold/30">
-          <path d="M50 0 L55.8 44.2 L100 50 L55.8 55.8 L50 100 L44.2 55.8 L0 50 L44.2 44.2 Z" />
-        </svg>
-      </div>
-      <div className="absolute bottom-1/4 -right-12 z-0 w-24 h-24 md:w-36 md:h-36 animate-[spin_20s_linear_infinite]">
-        <svg viewBox="0 0 100 100" className="fill-crown-gold/30">
-          <path d="M50 0 L55.8 44.2 L100 50 L55.8 55.8 L50 100 L44.2 55.8 L0 50 L44.2 44.2 Z" />
-        </svg>
-      </div>
+      <StarBackground/>
 
       <main className="relative z-10 w-full max-w-5xl px-6 pt-12 pb-24 text-center flex flex-col items-center flex-grow">
 
