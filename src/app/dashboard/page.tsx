@@ -19,7 +19,13 @@ import {
   X,
   Users,
   Search,
-  Download
+  Download,
+  Image as ImageIcon,
+  Video,
+  Upload,
+  Eye,
+  EyeOff,
+  Film
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -40,6 +46,17 @@ type Voter = {
   id: string
   nim: string
   email: string
+  created_at: string
+}
+type Documentation = {
+  id: string
+  title: string
+  description: string | null
+  media_url: string
+  media_type: 'image' | 'video'
+  category_id: string | null
+  display_order: number
+  is_published: boolean
   created_at: string
 }
 
@@ -73,6 +90,14 @@ export default function DashboardPage() {
   const [votersLoading, setVotersLoading] = useState(false)
   const [votersSearch, setVotersSearch] = useState('')
   const [votersError, setVotersError] = useState<string | null>(null)
+
+  // CRUD State - Dokumentasi
+  const [documentation, setDocumentation] = useState<Documentation[]>([])
+  const [docLoading, setDocLoading] = useState(false)
+  const [docUploading, setDocUploading] = useState(false)
+  const [newDoc, setNewDoc] = useState({ title: '', description: '', category_id: '' })
+  const [newDocFile, setNewDocFile] = useState<File | null>(null)
+  const [editingDocId, setEditingDocId] = useState<string | null>(null)
 
   // Alert Dialog State
   const [alertConfig, setAlertConfig] = useState({ open: false, title: '', message: '', isError: false })
@@ -164,7 +189,21 @@ export default function DashboardPage() {
     if (activeTab === 'voters') {
       fetchVoters()
     }
+    if (activeTab === 'documentation') {
+      fetchDocumentation()
+    }
   }, [activeTab])
+
+  // --- FETCH DOKUMENTASI ---
+  const fetchDocumentation = async () => {
+    setDocLoading(true)
+    const { data, error } = await supabaseFetcher<Documentation[]>({
+      table: 'documentation',
+      order: { column: 'display_order', ascending: true },
+    })
+    if (!error && data) setDocumentation(data)
+    setDocLoading(false)
+  }
 
   // --- CRUD KATEGORI ---
   const handleSubmitCategory = async (e: React.FormEvent) => {
@@ -236,13 +275,150 @@ export default function DashboardPage() {
     setNewNominee({ name: '', description: '', category_id: '' })
   }
 
+  // --- CRUD DOKUMENTASI ---
+  const MAX_DOC_FILE_SIZE = 20 * 1024 * 1024 // 20MB
+
+  const handleDocFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) {
+      setNewDocFile(null)
+      return
+    }
+    const isImage = file.type.startsWith('image/')
+    const isVideo = file.type.startsWith('video/')
+    if (!isImage && !isVideo) {
+      showAlert('Format Tidak Didukung', 'Hanya file gambar (jpg, png, dst) atau video (mp4, dst) yang diperbolehkan.', true)
+      e.target.value = ''
+      return
+    }
+    if (file.size > MAX_DOC_FILE_SIZE) {
+      showAlert('File Terlalu Besar', 'Ukuran file maksimal 20MB.', true)
+      e.target.value = ''
+      return
+    }
+    setNewDocFile(file)
+  }
+
+  const handleSubmitDocumentation = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newDoc.title) return
+    if (!editingDocId && !newDocFile) {
+      showAlert('File Wajib Diisi', 'Silakan pilih foto atau video untuk diunggah.', true)
+      return
+    }
+
+    setDocUploading(true)
+    try {
+      let mediaUrl: string | undefined
+      let mediaType: 'image' | 'video' | undefined
+
+      // Upload file baru ke storage jika ada
+      if (newDocFile) {
+        mediaType = newDocFile.type.startsWith('video/') ? 'video' : 'image'
+        const ext = newDocFile.name.split('.').pop()
+        const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+
+        const { error: uploadError } = await supabase.storage
+          .from('documentation')
+          .upload(path, newDocFile)
+
+        if (uploadError) {
+          showAlert('Gagal Upload!', uploadError.message, true)
+          setDocUploading(false)
+          return
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from('documentation')
+          .getPublicUrl(path)
+        mediaUrl = publicUrlData.publicUrl
+      }
+
+      const payload: Record<string, any> = {
+        title: newDoc.title,
+        description: newDoc.description || null,
+        category_id: newDoc.category_id || null,
+      }
+      if (mediaUrl) payload.media_url = mediaUrl
+      if (mediaType) payload.media_type = mediaType
+
+      if (editingDocId) {
+        const { error } = await supabase.from('documentation').update(payload).eq('id', editingDocId)
+        if (!error) {
+          showAlert('Berhasil!', 'Dokumentasi berhasil diperbarui! 📸')
+          cancelEditDocumentation()
+          fetchDocumentation()
+        } else {
+          showAlert('Gagal Update!', error.message, true)
+        }
+      } else {
+        const { error } = await supabase.from('documentation').insert(payload)
+        if (!error) {
+          showAlert('Berhasil!', 'Dokumentasi baru berhasil diunggah! 📸')
+          setNewDoc({ title: '', description: '', category_id: '' })
+          setNewDocFile(null)
+          fetchDocumentation()
+        } else {
+          showAlert('Gagal Tambah!', error.message, true)
+        }
+      }
+    } catch (err) {
+      console.error('Unexpected error handleSubmitDocumentation:', err)
+      showAlert('Terjadi Kesalahan', 'Gagal memproses unggahan dokumentasi.', true)
+    } finally {
+      setDocUploading(false)
+    }
+  }
+
+  const startEditDocumentation = (d: Documentation) => {
+    setEditingDocId(d.id)
+    setNewDoc({ title: d.title, description: d.description || '', category_id: d.category_id || '' })
+    setNewDocFile(null)
+  }
+  const cancelEditDocumentation = () => {
+    setEditingDocId(null)
+    setNewDoc({ title: '', description: '', category_id: '' })
+    setNewDocFile(null)
+  }
+
+  const toggleDocPublish = async (d: Documentation) => {
+    const { error } = await supabase.from('documentation').update({ is_published: !d.is_published }).eq('id', d.id)
+    if (!error) {
+      fetchDocumentation()
+    } else {
+      showAlert('Gagal!', error.message, true)
+    }
+  }
+
   // --- DELETE ---
-  const confirmDelete = (type: 'category' | 'nominee', id: string, name: string) => {
+  const confirmDelete = (type: 'category' | 'nominee' | 'documentation', id: string, name: string) => {
     setDeleteConfirm({ open: true, type, id, name })
   }
 
   const executeDelete = async () => {
     const { type, id } = deleteConfirm
+
+    if (type === 'documentation') {
+      const doc = documentation.find(d => d.id === id)
+      const { error } = await supabase.from('documentation').delete().eq('id', id)
+      setDeleteConfirm({ open: false, type: '', id: '', name: '' })
+      if (!error) {
+        // Hapus juga file di storage (best-effort, tidak menghalangi jika gagal)
+        if (doc?.media_url) {
+          const fileName = doc.media_url.split('/documentation/').pop()
+          if (fileName) {
+            await supabase.storage.from('documentation').remove([fileName])
+          }
+        }
+        showAlert('Terhapus!', 'Dokumentasi berhasil dihapus dari sistem.')
+        fetchDocumentation()
+        if (editingDocId === id) cancelEditDocumentation()
+      } else {
+        showAlert('Gagal Menghapus!', error.message, true)
+      }
+      return
+    }
+
     const table = type === 'category' ? 'categories' : 'nominees'
     
     const { error } = await supabase.from(table).delete().eq('id', id)
@@ -336,6 +512,7 @@ export default function DashboardPage() {
     { id: 'category', label: 'Kategori', icon: FolderPlus },
     { id: 'nominee', label: 'Nomine', icon: UserPlus },
     { id: 'voters', label: 'Data Voters', icon: Users },
+    { id: 'documentation', label: 'Dokumentasi', icon: ImageIcon },
     { id: 'settings', label: 'Pengaturan', icon: ShieldCheck },
   ]
 
@@ -414,6 +591,102 @@ export default function DashboardPage() {
       </div>
     )
   }
+
+  // Komponen Tab Dokumentasi
+  const renderDocumentationTab = () => (
+    <div className="animate-in fade-in duration-500 grid md:grid-cols-2 gap-10">
+      <div className="bg-crown-cream/5 p-6 rounded-3xl border border-crown-gold/20 h-fit">
+        <h2 className="text-2xl font-black text-crown-gold mb-4">
+          {editingDocId ? 'Ubah Dokumentasi' : 'Unggah Dokumentasi'}
+        </h2>
+        <form onSubmit={handleSubmitDocumentation} className="space-y-4">
+          <input
+            type="text" required value={newDoc.title} onChange={(e) => setNewDoc({ ...newDoc, title: e.target.value })}
+            className="w-full p-4 bg-crown-espresso border border-crown-gold/30 rounded-xl focus:border-crown-gold focus:outline-none focus:ring-2 focus:ring-crown-gold/30 text-crown-cream placeholder:text-crown-cream-dark/50"
+            placeholder="Judul (mis. Malam Puncak 2025)"
+          />
+          <textarea
+            value={newDoc.description} onChange={(e) => setNewDoc({ ...newDoc, description: e.target.value })}
+            className="w-full p-4 bg-crown-espresso border border-crown-gold/30 rounded-xl focus:border-crown-gold focus:outline-none focus:ring-2 focus:ring-crown-gold/30 text-crown-cream placeholder:text-crown-cream-dark/50" rows={3} placeholder="Deskripsi Singkat (opsional)"
+          />
+          <select
+            value={newDoc.category_id} onChange={(e) => setNewDoc({ ...newDoc, category_id: e.target.value })}
+            className="w-full p-4 bg-crown-espresso border border-crown-gold/30 rounded-xl focus:border-crown-gold focus:outline-none focus:ring-2 focus:ring-crown-gold/30 text-crown-cream"
+          >
+            <option value="">-- Tanpa Kategori --</option>
+            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+
+          <label className="flex flex-col items-center justify-center gap-2 w-full p-6 bg-crown-espresso border-2 border-dashed border-crown-gold/40 rounded-xl cursor-pointer hover:border-crown-gold transition-colors">
+            <Upload className="w-6 h-6 text-crown-gold" />
+            <span className="text-sm font-bold text-crown-cream-dark text-center">
+              {newDocFile ? newDocFile.name : editingDocId ? 'Ganti file (opsional)' : 'Pilih foto atau video'}
+            </span>
+            <input type="file" accept="image/*,video/*" onChange={handleDocFileChange} className="hidden" />
+          </label>
+
+          <div className="flex gap-2">
+            <button
+              type="submit" disabled={docUploading}
+              className="flex-1 flex items-center justify-center gap-2 px-6 py-3 text-crown-espresso font-bold rounded-xl shadow-[0_4px_12px_rgba(240,148,16,0.3)] transition-transform active:translate-y-1 bg-crown-gold hover:bg-[#d8820e] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {docUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+              {docUploading ? 'Mengunggah...' : editingDocId ? 'Simpan Perubahan' : 'Unggah'}
+            </button>
+            {editingDocId && (
+              <button type="button" onClick={cancelEditDocumentation} className="px-4 py-3 bg-crown-cream/10 text-crown-cream font-bold rounded-xl hover:bg-crown-cream/20 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+
+      <div>
+        <h2 className="text-2xl font-black text-crown-gold mb-4">Galeri ({documentation.length})</h2>
+        {docLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-8 w-8 text-crown-gold animate-spin" />
+          </div>
+        ) : documentation.length === 0 ? (
+          <div className="text-center py-12 text-crown-cream-dark/60 font-medium">Belum ada dokumentasi diunggah.</div>
+        ) : (
+          <div className="max-h-[600px] overflow-y-auto space-y-3 pr-2">
+            {documentation.map(d => (
+              <div key={d.id} className={`flex items-start gap-4 p-4 border rounded-xl transition-colors ${
+                editingDocId === d.id ? 'border-crown-gold bg-crown-gold/10' : 'border-crown-bronze/20 bg-crown-cream/5'
+              }`}>
+                <div className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-crown-espresso border border-crown-bronze/20 flex items-center justify-center">
+                  {d.media_type === 'video' ? (
+                    <Film className="w-8 h-8 text-crown-gold/60" />
+                  ) : (
+                    <img src={d.media_url} alt={d.title} className="w-full h-full object-cover" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className={`font-black truncate ${editingDocId === d.id ? 'text-crown-gold' : 'text-crown-cream'}`}>{d.title}</p>
+                    {d.media_type === 'video' && <Video className="w-3.5 h-3.5 text-crown-cream-dark/50 flex-shrink-0" />}
+                  </div>
+                  {d.description && <p className="text-xs text-crown-cream-dark/60 mt-1 line-clamp-2">{d.description}</p>}
+                  <p className="text-xs font-bold text-crown-cream-dark/60 mt-1">
+                    Kat: {categories.find(c => c.id === d.category_id)?.name || 'Umum'} · {d.is_published ? 'Tayang' : 'Draft'}
+                  </p>
+                </div>
+                <div className="flex flex-col items-center gap-1 ml-2 flex-shrink-0">
+                  <button onClick={() => toggleDocPublish(d)} title={d.is_published ? 'Sembunyikan' : 'Tayangkan'} className="p-2 text-crown-cream-dark/50 hover:text-crown-gold hover:bg-crown-cream/10 rounded-lg transition-colors">
+                    {d.is_published ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  </button>
+                  <button onClick={() => startEditDocumentation(d)} className="p-2 text-crown-cream-dark/50 hover:text-crown-gold hover:bg-crown-cream/10 rounded-lg transition-colors"><Pencil className="w-4 h-4" /></button>
+                  <button onClick={() => confirmDelete('documentation', d.id, d.title)} className="p-2 text-crown-cream-dark/50 hover:text-red-400 hover:bg-crown-cream/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-crown-espresso font-sans flex flex-col">
@@ -620,7 +893,10 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* TAB 5: PENGATURAN */}
+              {/* TAB 5: DOKUMENTASI */}
+              {activeTab === 'documentation' && renderDocumentationTab()}
+
+              {/* TAB 6: PENGATURAN */}
               {activeTab === 'settings' && (
                 <div className="animate-in fade-in duration-500 space-y-12">
                   <div className="grid md:grid-cols-2 gap-8">

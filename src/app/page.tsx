@@ -2,15 +2,24 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase/client"
 import {
   ArrowRight, Calendar, Users, Trophy, Loader2,
-  Award, Target, Heart, Handshake, Clock
+  Award, Target, Heart, Handshake, Clock,
+  ShieldCheck, Lock, Database, Film
 } from "lucide-react"
 import Navbar from "@/components/layout/Navbar"
 import { useAuth } from "@/hooks/useAuth"
 import StarBackground from '@/components/layout/StarBackground'
+
+type Documentation = {
+  id: string
+  title: string
+  media_url: string
+  media_type: 'image' | 'video'
+}
 
 export default function LandingPage() {
   const { isLoggedIn, loading: authLoading } = useAuth()
@@ -19,6 +28,9 @@ export default function LandingPage() {
   const [totalNominees, setTotalNominees] = useState(0)
   const [isVotingActive, setIsVotingActive] = useState(true)
   const [isDataLoading, setIsDataLoading] = useState(true)
+
+  const [documentation, setDocumentation] = useState<Documentation[]>([])
+  const [docLoading, setDocLoading] = useState(true)
 
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 })
 
@@ -35,6 +47,21 @@ export default function LandingPage() {
       setIsDataLoading(false)
     }
     fetchDashboardData()
+  }, [])
+
+  useEffect(() => {
+    const fetchDocumentation = async () => {
+      setDocLoading(true)
+      const { data } = await supabase
+        .from('documentation')
+        .select('id, title, media_url, media_type')
+        .eq('is_published', true)
+        .order('display_order', { ascending: true })
+        .limit(3)
+      if (data) setDocumentation(data)
+      setDocLoading(false)
+    }
+    fetchDocumentation()
   }, [])
 
   useEffect(() => {
@@ -170,6 +197,31 @@ export default function LandingPage() {
               >
                 Daftar sebagai Voter <ArrowRight className="h-4 w-4 animate-[pulse_1.5s_infinite]" />
               </Button>
+
+              {/* Info keamanan login Google, dibuat sesederhana mungkin untuk orang awam */}
+              <div className="mt-6 pt-6 border-t border-crown-gold/10 text-left space-y-3">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-crown-gold flex-shrink-0" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-crown-gold">Login Aman Pakai Akun Google</span>
+                </div>
+                <p className="text-xs text-crown-cream-dark/70 leading-relaxed">
+                  Tombol di atas memakai fitur resmi <span className="font-semibold text-crown-cream">"Login dengan Google" (Google Sign-In / OAuth)</span> - jadi kamu login lewat sistem Google sendiri, bukan lewat website kami.
+                </p>
+                <ul className="space-y-2">
+                  <li className="flex items-start gap-2 text-xs text-crown-cream-dark/70">
+                    <Lock className="h-3.5 w-3.5 text-crown-gold mt-0.5 flex-shrink-0" />
+                    <span>Kami <span className="font-semibold text-crown-cream">tidak pernah tahu dan tidak menyimpan</span> kata sandi akun Google kamu.</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-xs text-crown-cream-dark/70">
+                    <Database className="h-3.5 w-3.5 text-crown-gold mt-0.5 flex-shrink-0" />
+                    <span>Yang kami simpan hanya <span className="font-semibold text-crown-cream">data voting kamu</span> (pilihan & email untuk verifikasi), bukan data pribadi lain dari akun Google.</span>
+                  </li>
+                  <li className="flex items-start gap-2 text-xs text-crown-cream-dark/70">
+                    <ShieldCheck className="h-3.5 w-3.5 text-crown-gold mt-0.5 flex-shrink-0" />
+                    <span>Keamanan akun kamu tetap sepenuhnya dijamin oleh sistem Google, bukan oleh kami.</span>
+                  </li>
+                </ul>
+              </div>
             </div>
           )
         )}
@@ -210,15 +262,61 @@ export default function LandingPage() {
                 desc: 'Menciptakan ruang apresiasi yang mempererat hubungan antara seluruh civitas akademika serta LKM & LOF FIA UB.'
               }
             ].map((item, idx) => (
-              <div key={idx} className="p-6 rounded-2xl bg-crown-cream/5 backdrop-blur-sm border border-crown-gold/10 hover:border-crown-gold/30 transition-all duration-300 shadow-lg hover:shadow-[0_8px_24px_rgba(240,148,16,0.15)]">
-                <div className="flex items-center gap-3 mb-3">
-                  <item.icon className="h-8 w-8 text-crown-gold" />
-                  <h4 className="text-lg font-bold text-crown-cream">{item.title}</h4>
-                </div>
+              <div key={idx} className="p-6 rounded-2xl bg-crown-cream/5 backdrop-blur-sm border border-crown-gold/10 hover:border-crown-gold/30 transition-all duration-300 shadow-lg hover:shadow-[0_8px_24px_rgba(240,148,16,0.15)] flex flex-col items-center text-center">
+                <item.icon className="h-8 w-8 text-crown-gold mb-3" />
+                <h4 className="text-lg font-bold text-crown-cream mb-2">{item.title}</h4>
                 <p className="text-crown-cream-dark/80 text-sm leading-relaxed">{item.desc}</p>
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Section Dokumentasi (preview beberapa item, selengkapnya di /galery) */}
+        <div className="w-full mt-16 text-left">
+          <div className="flex items-center justify-between mb-6 border-b border-crown-gold/30 pb-2">
+            <h2 className="text-3xl md:text-4xl font-bold text-crown-gold inline-block">
+              Dokumentasi
+            </h2>
+            <Link
+              href="/galery"
+              className="flex items-center gap-1 text-sm font-bold text-crown-cream-dark hover:text-crown-gold transition-colors flex-shrink-0"
+            >
+              Lihat Semua <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          {docLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-8 w-8 text-crown-gold animate-spin" />
+            </div>
+          ) : documentation.length === 0 ? (
+            <p className="text-crown-cream-dark/60 text-center py-10 font-medium">
+              Dokumentasi acara akan segera hadir di sini.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              {documentation.map((item) => (
+                <Link key={item.id} href={`/galery/${item.id}`} className="group block">
+                  <div className="rounded-2xl overflow-hidden border border-crown-gold/20 bg-crown-cream/5 aspect-video relative">
+                    {item.media_type === 'video' ? (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Film className="w-8 h-8 text-crown-gold/60" />
+                      </div>
+                    ) : (
+                      <img
+                        src={item.media_url}
+                        alt={item.title}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                      />
+                    )}
+                  </div>
+                  <p className="mt-2 text-sm font-bold text-crown-cream group-hover:text-crown-gold transition-colors truncate">
+                    {item.title}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
       </main>

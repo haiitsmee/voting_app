@@ -34,7 +34,6 @@ export async function supabaseFetcher<T>({
     }
 
     if (single) {
-      // ✅ Ganti .single() dengan .maybeSingle() agar tidak error 406 jika data tidak ditemukan
       const { data, error } = await query.maybeSingle()
       if (error) return { data: null, error }
       return { data: data as T, error: null }
