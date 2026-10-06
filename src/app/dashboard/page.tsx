@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Navbar from '@/components/layout/Navbar'
 import { supabase } from '@/lib/supabase/client'
 import { supabaseFetcher } from '@/lib/supabase/fetcher'
@@ -25,7 +25,10 @@ import {
   Upload,
   Eye,
   EyeOff,
-  Film
+  Film,
+  Filter,
+  Trophy,
+  User
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -59,6 +62,18 @@ type Documentation = {
   is_published: boolean
   created_at: string
 }
+// Tipe data untuk rekap vote per voter
+type VoterVote = {
+  voter_id: string
+  nim: string
+  email: string
+  created_at: string
+  category_id: string | null
+  category_name: string | null
+  nominee_id: string | null
+  nominee_name: string | null
+  voted_at: string | null
+}
 
 export default function DashboardPage() {
   const [isMounted, setIsMounted] = useState(false)
@@ -90,6 +105,16 @@ export default function DashboardPage() {
   const [votersLoading, setVotersLoading] = useState(false)
   const [votersSearch, setVotersSearch] = useState('')
   const [votersError, setVotersError] = useState<string | null>(null)
+
+  // Rekap Vote State
+  const [voterVotes, setVoterVotes] = useState<VoterVote[]>([])
+  const [voterVotesLoading, setVoterVotesLoading] = useState(false)
+  const [voterVotesError, setVoterVotesError] = useState<string | null>(null)
+  const [voterVotesSearch, setVoterVotesSearch] = useState('')
+  // [NEW] Filter & view mode state
+  const [rekapViewMode, setRekapViewMode] = useState<'voter' | 'nominee'>('voter')
+  const [filterCategoryId, setFilterCategoryId] = useState('')
+  const [filterNomineeId, setFilterNomineeId] = useState('')
 
   // CRUD State - Dokumentasi
   const [documentation, setDocumentation] = useState<Documentation[]>([])
@@ -185,12 +210,36 @@ export default function DashboardPage() {
     }
   }
 
+  // --- FETCH REKAP VOTE PER VOTER ---
+  const fetchVoterVotes = async () => {
+    setVoterVotesLoading(true)
+    setVoterVotesError(null)
+    try {
+      const { data, error } = await supabase.rpc('get_voter_votes')
+      if (error) {
+        setVoterVotesError(`Gagal memuat rekap vote: ${error.message}`)
+        setVoterVotes([])
+      } else {
+        setVoterVotes((data as VoterVote[]) || [])
+      }
+    } catch (err) {
+      console.error('Unexpected error fetchVoterVotes:', err)
+      setVoterVotesError('Terjadi kesalahan tak terduga saat memuat rekap vote.')
+      setVoterVotes([])
+    } finally {
+      setVoterVotesLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (activeTab === 'voters') {
       fetchVoters()
     }
     if (activeTab === 'documentation') {
       fetchDocumentation()
+    }
+    if (activeTab === 'rekap') {
+      fetchVoterVotes()
     }
   }, [activeTab])
 
@@ -312,7 +361,6 @@ export default function DashboardPage() {
       let mediaUrl: string | undefined
       let mediaType: 'image' | 'video' | undefined
 
-      // Upload file baru ke storage jika ada
       if (newDocFile) {
         mediaType = newDocFile.type.startsWith('video/') ? 'video' : 'image'
         const ext = newDocFile.name.split('.').pop()
@@ -403,7 +451,6 @@ export default function DashboardPage() {
       const { error } = await supabase.from('documentation').delete().eq('id', id)
       setDeleteConfirm({ open: false, type: '', id: '', name: '' })
       if (!error) {
-        // Hapus juga file di storage (best-effort, tidak menghalangi jika gagal)
         if (doc?.media_url) {
           const fileName = doc.media_url.split('/documentation/').pop()
           if (fileName) {
@@ -474,19 +521,12 @@ export default function DashboardPage() {
     const headers = ['Email', 'NIM', 'Tanggal Registrasi']
     const rows = filtered.map(v => [
       v.email,
-      `="${v.nim}"`, // NIM diformat sebagai teks agar tidak scientific notation
+      `="${v.nim}"`,
       new Date(v.created_at).toLocaleString('id-ID', { 
-        day: '2-digit', 
-        month: 'long', 
-        year: 'numeric', 
-        hour: '2-digit', 
-        minute: '2-digit' 
+        day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' 
       })
     ])
-    const csvContent = [
-      headers.join(delimiter),
-      ...rows.map(r => r.join(delimiter))
-    ].join('\n')
+    const csvContent = [headers.join(delimiter), ...rows.map(r => r.join(delimiter))].join('\n')
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
@@ -506,12 +546,205 @@ export default function DashboardPage() {
     )
   }
 
+  // =====================================================
+  // [UPDATED] Rekap Vote - Helper Functions
+  // =====================================================
+
+  // Nominees yang muncul di dropdown berdasarkan kategori terpilih
+  const filterNomineeOptions = useMemo(() => {
+    if (!filterCategoryId) return nominees
+    return nominees.filter(n => n.category_id === filterCategoryId)
+  }, [nominees, filterCategoryId])
+
+  // Reset nominee filter kalau kategori berubah dan nominee tidak termasuk
+  useEffect(() => {
+    if (filterNomineeId && filterCategoryId) {
+      const stillValid = nominees.find(n => n.id === filterNomineeId && n.category_id === filterCategoryId)
+      if (!stillValid) setFilterNomineeId('')
+    }
+  }, [filterCategoryId, filterNomineeId, nominees])
+
+  // VoterVotes setelah difilter berdasarkan kategori & nominee
+  const filteredVoterVotes = useMemo(() => {
+    return voterVotes.filter(v => {
+      if (filterCategoryId && v.category_id !== filterCategoryId) return false
+      if (filterNomineeId && v.nominee_id !== filterNomineeId) return false
+      return true
+    })
+  }, [voterVotes, filterCategoryId, filterNomineeId])
+
+  // Group per voter (dengan filter + search)
+  const getGroupedVoterVotes = () => {
+    const grouped = new Map<string, {
+      nim: string
+      email: string
+      created_at: string
+      votes: { category_name: string | null; nominee_name: string | null; voted_at: string | null }[]
+    }>()
+
+    filteredVoterVotes.forEach(v => {
+      if (!grouped.has(v.email)) {
+        grouped.set(v.email, { nim: v.nim, email: v.email, created_at: v.created_at, votes: [] })
+      }
+      if (v.nominee_name) {
+        grouped.get(v.email)!.votes.push({
+          category_name: v.category_name,
+          nominee_name: v.nominee_name,
+          voted_at: v.voted_at,
+        })
+      }
+    })
+
+    const rows = Array.from(grouped.values())
+
+    if (!voterVotesSearch.trim()) return rows
+    const q = voterVotesSearch.trim().toLowerCase()
+    return rows.filter(r =>
+      r.email.toLowerCase().includes(q) || r.nim.includes(q)
+    )
+  }
+
+  // [NEW] Group per nominee (untuk view "Per Nomine")
+  const getGroupedByNominee = () => {
+    const map = new Map<string, {
+      nominee_id: string
+      nominee_name: string
+      category_id: string | null
+      category_name: string | null
+      voters: { nim: string; email: string; voted_at: string | null }[]
+    }>()
+
+    // Inisialisasi semua nominee yang eligible muncul (sesuai filter kategori)
+    const eligibleNominees = filterCategoryId
+      ? nominees.filter(n => n.category_id === filterCategoryId)
+      : nominees
+
+    eligibleNominees.forEach(n => {
+      if (filterNomineeId && n.id !== filterNomineeId) return
+      const cat = categories.find(c => c.id === n.category_id)
+      map.set(n.id, {
+        nominee_id: n.id,
+        nominee_name: n.name,
+        category_id: n.category_id,
+        category_name: cat?.name || null,
+        voters: []
+      })
+    })
+
+    // Isi voter ke masing-masing nominee
+    filteredVoterVotes.forEach(v => {
+      if (!v.nominee_id || !v.nominee_name) return
+      if (!map.has(v.nominee_id)) {
+        // Nominee tidak ada di list (mis. sudah dihapus) - skip
+        return
+      }
+      map.get(v.nominee_id)!.voters.push({
+        nim: v.nim,
+        email: v.email,
+        voted_at: v.voted_at,
+      })
+    })
+
+    const rows = Array.from(map.values())
+
+    // Apply search
+    if (!voterVotesSearch.trim()) return rows
+    const q = voterVotesSearch.trim().toLowerCase()
+    return rows.filter(r =>
+      r.nominee_name.toLowerCase().includes(q) ||
+      r.voters.some(v => v.email.toLowerCase().includes(q) || v.nim.includes(q))
+    )
+  }
+
+  // Export CSV untuk rekap vote
+  const exportVoterVotesCSV = () => {
+    if (rekapViewMode === 'voter') {
+      const rows = getGroupedVoterVotes()
+      if (rows.length === 0) {
+        showAlert('Tidak Ada Data', 'Tidak ada data rekap vote untuk diekspor.', true)
+        return
+      }
+      const delimiter = ';'
+      const headers = ['NIM', 'Email', 'Kategori', 'Nomine', 'Waktu Vote']
+      const csvRows: string[][] = []
+      rows.forEach(r => {
+        if (r.votes.length === 0) {
+          csvRows.push([`="${r.nim}"`, r.email, '-', '(Belum memilih)', '-'])
+        } else {
+          r.votes.forEach(v => {
+            csvRows.push([
+              `="${r.nim}"`,
+              r.email,
+              v.category_name || '-',
+              v.nominee_name || '-',
+              v.voted_at
+                ? new Date(v.voted_at).toLocaleString('id-ID', {
+                    day: '2-digit', month: 'long', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                  })
+                : '-'
+            ])
+          })
+        }
+      })
+      const csvContent = [headers.join(delimiter), ...csvRows.map(r => r.join(delimiter))].join('\n')
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `rekap_vote_${new Date().toISOString().slice(0,10)}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(link.href)
+    } else {
+      const rows = getGroupedByNominee()
+      if (rows.length === 0) {
+        showAlert('Tidak Ada Data', 'Tidak ada data rekap untuk diekspor.', true)
+        return
+      }
+      const delimiter = ';'
+      const headers = ['Kategori', 'Nomine', 'Total Suara', 'NIM Voter', 'Email Voter', 'Waktu Vote']
+      const csvRows: string[][] = []
+      rows.forEach(r => {
+        if (r.voters.length === 0) {
+          csvRows.push([r.category_name || '-', r.nominee_name, '0', '-', '-', '-'])
+        } else {
+          r.voters.forEach(v => {
+            csvRows.push([
+              r.category_name || '-',
+              r.nominee_name,
+              String(r.voters.length),
+              `="${v.nim}"`,
+              v.email,
+              v.voted_at
+                ? new Date(v.voted_at).toLocaleString('id-ID', {
+                    day: '2-digit', month: 'long', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                  })
+                : '-'
+            ])
+          })
+        }
+      })
+      const csvContent = [headers.join(delimiter), ...csvRows.map(r => r.join(delimiter))].join('\n')
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `rekap_nomine_${new Date().toISOString().slice(0,10)}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(link.href)
+    }
+  }
+
   // TABS
   const tabs = [
     { id: 'monitor', label: 'Pemantauan', icon: BarChart3 },
     { id: 'category', label: 'Kategori', icon: FolderPlus },
     { id: 'nominee', label: 'Nomine', icon: UserPlus },
     { id: 'voters', label: 'Data Voters', icon: Users },
+    { id: 'rekap', label: 'Rekap Vote', icon: CheckCircle2 },
     { id: 'documentation', label: 'Dokumentasi', icon: ImageIcon },
     { id: 'settings', label: 'Pengaturan', icon: ShieldCheck },
   ]
@@ -575,11 +808,7 @@ export default function DashboardPage() {
                     <td className="px-4 py-3 font-mono text-crown-cream-dark">{voter.nim}</td>
                     <td className="px-4 py-3 text-sm text-crown-cream-dark">
                       {new Date(voter.created_at).toLocaleString('id-ID', {
-                        day: '2-digit',
-                        month: 'long',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
+                        day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
                       })}
                     </td>
                   </tr>
@@ -587,6 +816,319 @@ export default function DashboardPage() {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+    )
+  }
+
+  // =====================================================
+  // [IMPROVED] Komponen Tab Rekap Vote - UX yang lebih nyaman
+  // =====================================================
+  const renderRekapVote = () => {
+    const rowsVoter = getGroupedVoterVotes()
+    const rowsNominee = getGroupedByNominee()
+
+    const totalVoters = rowsVoter.length
+    const sudahVote = rowsVoter.filter(r => r.votes.length > 0).length
+    const belumVote = totalVoters - sudahVote
+
+    const activeFilterCount = (filterCategoryId ? 1 : 0) + (filterNomineeId ? 1 : 0) + (voterVotesSearch ? 1 : 0)
+    const hasFilter = activeFilterCount > 0
+
+    const resetFilters = () => {
+      setFilterCategoryId('')
+      setFilterNomineeId('')
+      setVoterVotesSearch('')
+    }
+
+    return (
+      <div className="space-y-6">
+        {/* HEADER */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <h2 className="text-2xl font-black text-crown-gold flex items-center gap-2">
+            <CheckCircle2 className="w-6 h-6 text-crown-gold" />
+            Rekap Vote
+          </h2>
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-1 p-1 bg-crown-espresso/80 border border-crown-gold/30 rounded-xl">
+            <button
+              onClick={() => setRekapViewMode('voter')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all ${
+                rekapViewMode === 'voter'
+                  ? 'bg-crown-gold text-crown-espresso shadow-[0_2px_8px_rgba(240,148,16,0.4)]'
+                  : 'text-crown-cream-dark hover:text-crown-cream'
+              }`}
+            >
+              <User className="w-4 h-4" /> Per Voter
+            </button>
+            <button
+              onClick={() => setRekapViewMode('nominee')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-all ${
+                rekapViewMode === 'nominee'
+                  ? 'bg-crown-gold text-crown-espresso shadow-[0_2px_8px_rgba(240,148,16,0.4)]'
+                  : 'text-crown-cream-dark hover:text-crown-cream'
+              }`}
+            >
+              <Trophy className="w-4 h-4" /> Per Nomine
+            </button>
+          </div>
+        </div>
+
+        {/* FILTER BAR */}
+        <div className="bg-crown-espresso/60 border border-crown-gold/20 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-bold text-crown-cream-dark">
+            <Filter className="w-4 h-4 text-crown-gold" />
+            Filter Data
+            {hasFilter && (
+              <span className="ml-1 px-2 py-0.5 text-xs bg-crown-gold text-crown-espresso rounded-full">
+                {activeFilterCount} aktif
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-crown-gold/60" />
+              <input
+                type="text"
+                placeholder={rekapViewMode === 'voter' ? 'Cari NIM atau Email...' : 'Cari nomine / voter...'}
+                value={voterVotesSearch}
+                onChange={(e) => setVoterVotesSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-crown-espresso border border-crown-gold/30 rounded-xl text-crown-cream placeholder:text-crown-cream-dark/50 focus:outline-none focus:ring-2 focus:ring-crown-gold/60 transition-all"
+              />
+            </div>
+
+            {/* Category Filter */}
+            <select
+              value={filterCategoryId}
+              onChange={(e) => setFilterCategoryId(e.target.value)}
+              className="w-full px-4 py-2.5 bg-crown-espresso border border-crown-gold/30 rounded-xl text-crown-cream focus:outline-none focus:ring-2 focus:ring-crown-gold/60 transition-all cursor-pointer"
+            >
+              <option value="">📁 Semua Kategori</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+
+            {/* Nominee Filter */}
+            <select
+              value={filterNomineeId}
+              onChange={(e) => setFilterNomineeId(e.target.value)}
+              className="w-full px-4 py-2.5 bg-crown-espresso border border-crown-gold/30 rounded-xl text-crown-cream focus:outline-none focus:ring-2 focus:ring-crown-gold/60 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <option value="">🏆 Semua Nomine</option>
+              {filterNomineeOptions.map(n => (
+                <option key={n.id} value={n.id}>{n.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Active filter chips + Export */}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {filterCategoryId && (
+              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold bg-crown-gold/20 text-crown-gold border border-crown-gold/40 rounded-full">
+                📁 {categories.find(c => c.id === filterCategoryId)?.name}
+                <button onClick={() => setFilterCategoryId('')} className="hover:text-crown-cream">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {filterNomineeId && (
+              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold bg-crown-gold/20 text-crown-gold border border-crown-gold/40 rounded-full">
+                🏆 {nominees.find(n => n.id === filterNomineeId)?.name}
+                <button onClick={() => setFilterNomineeId('')} className="hover:text-crown-cream">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {voterVotesSearch && (
+              <span className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold bg-crown-gold/20 text-crown-gold border border-crown-gold/40 rounded-full">
+                🔍 &quot;{voterVotesSearch}&quot;
+                <button onClick={() => setVoterVotesSearch('')} className="hover:text-crown-cream">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+            {hasFilter && (
+              <button
+                onClick={resetFilters}
+                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-bold text-red-300 hover:text-red-200 border border-red-400/30 hover:border-red-400/60 rounded-full transition-colors"
+              >
+                <X className="w-3 h-3" /> Reset Semua
+              </button>
+            )}
+
+            <div className="ml-auto">
+              <button
+                onClick={exportVoterVotesCSV}
+                className="flex items-center gap-2 px-4 py-2 bg-crown-gold text-crown-espresso text-sm font-bold rounded-xl hover:bg-[#d8820e] transition-colors shadow-[0_4px_12px_rgba(240,148,16,0.3)]"
+              >
+                <Download className="w-4 h-4" />
+                Export CSV
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* STATISTIK RINGKAS */}
+        {!voterVotesLoading && !voterVotesError && rowsVoter.length > 0 && rekapViewMode === 'voter' && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 bg-crown-cream/10 border border-crown-gold/30 rounded-2xl text-center">
+              <p className="text-3xl font-black text-crown-gold">{totalVoters}</p>
+              <p className="text-sm font-bold text-crown-cream-dark">Voter Ditampilkan</p>
+            </div>
+            <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-2xl text-center">
+              <p className="text-3xl font-black text-green-300">{sudahVote}</p>
+              <p className="text-sm font-bold text-crown-cream-dark">Sudah Memilih</p>
+            </div>
+            <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-2xl text-center">
+              <p className="text-3xl font-black text-yellow-300">{belumVote}</p>
+              <p className="text-sm font-bold text-crown-cream-dark">Belum Memilih</p>
+            </div>
+          </div>
+        )}
+
+        {voterVotesLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-8 w-8 text-crown-gold animate-spin" />
+          </div>
+        ) : voterVotesError ? (
+          <div className="bg-red-500/20 border border-red-500/30 text-red-200 p-4 rounded-xl flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            <span>{voterVotesError}</span>
+          </div>
+        ) : rekapViewMode === 'voter' ? (
+          /* ====== VIEW: PER VOTER ====== */
+          rowsVoter.length === 0 ? (
+            <div className="text-center py-12 text-crown-cream-dark/60">
+              {hasFilter ? 'Tidak ada voter yang cocok dengan filter.' : 'Belum ada data voter terdaftar.'}
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-crown-bronze/20 bg-crown-espresso/50">
+              <table className="w-full text-left">
+                <thead className="border-b border-crown-bronze/30 bg-crown-espresso">
+                  <tr>
+                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-crown-gold">No</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-crown-gold">NIM</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-crown-gold">Email</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-crown-gold">Pilihan</th>
+                    <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-crown-gold">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-crown-bronze/10">
+                  {rowsVoter.map((r, idx) => (
+                    <tr key={r.email} className="hover:bg-crown-cream/5 transition-colors align-top">
+                      <td className="px-4 py-3 text-crown-cream-dark">{idx + 1}</td>
+                      <td className="px-4 py-3 font-mono text-crown-cream-dark">{r.nim}</td>
+                      <td className="px-4 py-3 font-medium text-crown-cream">{r.email}</td>
+                      <td className="px-4 py-3">
+                        {r.votes.length === 0 ? (
+                          <span className="text-crown-cream-dark/50 italic">Belum memilih</span>
+                        ) : (
+                          <ul className="space-y-1">
+                            {r.votes.map((vote, i) => (
+                              <li key={i} className="text-sm text-crown-cream">
+                                <span className="font-bold text-crown-gold">{vote.category_name}:</span>{' '}
+                                {vote.nominee_name}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {r.votes.length > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-green-500/20 text-green-300 border border-green-500/30">
+                            <CheckCircle2 className="w-3 h-3" /> Sudah
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                            <AlertTriangle className="w-3 h-3" /> Belum
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : (
+          /* ====== VIEW: PER NOMINE ====== */
+          rowsNominee.length === 0 ? (
+            <div className="text-center py-12 text-crown-cream-dark/60">
+              {hasFilter ? 'Tidak ada nomine yang cocok dengan filter.' : 'Belum ada data nomine.'}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {rowsNominee.map((r) => {
+                const totalVotes = r.voters.length
+                const isWinner = totalVotes > 0 && rowsNominee
+                  .filter(x => x.category_id === r.category_id)
+                  .every(x => x.voters.length <= totalVotes)
+
+                return (
+                  <div
+                    key={r.nominee_id}
+                    className={`rounded-2xl border p-6 transition-all ${
+                      isWinner && totalVotes > 0
+                        ? 'border-crown-gold/60 bg-crown-gold/5 shadow-[0_4px_20px_rgba(240,148,16,0.15)]'
+                        : 'border-crown-bronze/20 bg-crown-cream/5'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-4 pb-3 border-b border-crown-bronze/30">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold uppercase tracking-wider text-crown-cream-dark/60 mb-1">
+                          {r.category_name || 'Tanpa Kategori'}
+                        </p>
+                        <h4 className="text-lg font-black text-crown-gold flex items-center gap-2 flex-wrap">
+                          {isWinner && totalVotes > 0 && <Trophy className="w-4 h-4" />}
+                          {r.nominee_name}
+                        </h4>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-3xl font-black text-crown-gold leading-none">{totalVotes}</p>
+                        <p className="text-xs font-bold text-crown-cream-dark/70 mt-1">suara</p>
+                      </div>
+                    </div>
+
+                    {r.voters.length === 0 ? (
+                      <p className="text-sm text-crown-cream-dark/50 italic text-center py-4">
+                        Belum ada yang memilih.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        {r.voters.map((v, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between gap-2 p-2.5 bg-crown-espresso/60 rounded-lg border border-crown-bronze/10"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-7 h-7 flex items-center justify-center rounded-full bg-crown-gold/20 text-crown-gold text-xs font-black flex-shrink-0">
+                                {i + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="font-mono text-xs text-crown-cream-dark/80 truncate">{v.nim}</p>
+                                <p className="text-sm font-medium text-crown-cream truncate">{v.email}</p>
+                              </div>
+                            </div>
+                            <span className="text-xs text-crown-cream-dark/60 flex-shrink-0">
+                              {v.voted_at
+                                ? new Date(v.voted_at).toLocaleString('id-ID', {
+                                    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                                  })
+                                : '-'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
         )}
       </div>
     )
@@ -890,6 +1432,13 @@ export default function DashboardPage() {
                     Data Voter Terdaftar
                   </h2>
                   {renderVotersTable()}
+                </div>
+              )}
+
+              {/* TAB: REKAP VOTE */}
+              {activeTab === 'rekap' && (
+                <div className="animate-in fade-in duration-500">
+                  {renderRekapVote()}
                 </div>
               )}
 
